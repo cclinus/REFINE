@@ -9,9 +9,131 @@
 
 using namespace llvm;
 
-void X86FaultInjection::injectFault(MachineFunction &MF, std::vector<MCPhysReg> const &FIRegs,
-        MachineBasicBlock &InstSelMBB, MachineBasicBlock &PreFIMBB,
-        SmallVector<MachineBasicBlock *, 4> &OpSelMBBs, SmallVector<MachineBasicBlock *, 4> &FIMBBs,
+// XXX: slowdown for storing string
+#define INSTR_PRINT
+
+void X86FaultInjection::injectMachineBasicBlock(MachineBasicBlock &SelMBB, MachineBasicBlock &OriginalMBB, MachineBasicBlock &CopyMBB, uint64_t TargetInstrCount) const
+{
+    MachineFunction &MF = *SelMBB.getParent();
+    const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+    X86MachineFunctionInfo *X86MFI = MF.getInfo<X86MachineFunctionInfo>();
+
+    /* ============================================================= CREATE SelMBB ========================================================== */
+
+    // Stay clear of the red zone, 128 bytes
+    // XXX: This MUST be done even FI in RSP, it will be adjusted anyway at PostFIMBB
+    if(X86MFI->getUsesRedZone())
+        // LEA to adjust RSP (does not clobber flags)
+        addRegOffset(BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, -128);
+
+    unsigned RSPOffset = 0, RBPOffset = -8, RAXOffset = -16;
+    // Save frame registers (RSP, RBP, RAX), use RBP for addressing
+    {
+        // PUSH RSP
+        BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::PUSH64r)).addReg(X86::RSP);
+        // PUSH RBP
+        BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::PUSH64r)).addReg(X86::RBP);
+        // RBP <- original RSP 
+        addRegOffset(BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RBP), X86::RSP, false, -RBPOffset);
+
+        // XXX: We have to store EFLAGS, they may be live during the execution of this BB
+        // PUSH RAX used for saving flags, required by LAHF/SAHF instructions
+        BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::PUSH64r)).addReg(X86::RAX);
+        // STORE flags
+        BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::SETOr), X86::AL);
+        BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::LAHF)); //ggout ggin
+    }
+
+    // XXX: Stack must be 16-byte aligned before calling a function. We don't know what's the alignment
+    // before the call, so we do a double push scheme of RSP to align and restore it. Plus, PXOR for FI 
+    // needs memory 16-byte aligned too. Align SP on a 16-byte boundary
+    {
+        BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::AND64ri8), X86::RSP).addReg(X86::RSP).addImm(-16);
+    }
+
+    {
+        // PUSH R11 (preserve_all misses R11)
+        BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::PUSH64r)).addReg(X86::R11);
+        // PUSH RDI for selMBB arg1 (pointer stack, inject flag)
+        BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::PUSH64r)).addReg(X86::RDI);
+        // PUSH RSI for selMBB arg2 (value, number of instruction)
+        BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::PUSH64r)).addReg(X86::RSI);
+
+        // MOV RSI <= MBB.size(), selMBB arg2 (uint64_t, number of instructions)
+        BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::MOV64ri), X86::RSI).addImm(TargetInstrCount);
+        // Allocate stack space, XXX: 24-byte for alignment since pushed 3 regs (r11, rdi, rsi)
+        addRegOffset(BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, -24);
+        // MOV RDI <= RSP, selMBB arg1
+        addRegOffset(BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RDI), X86::RSP, false, 0);
+        BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::CALL64pcrel32)).addExternalSymbol("selMBB");
+        // TEST for jump (see code later), XXX: THIS SETS FLAGS FOR THE JMP, be careful not to mess with them until the branch
+        addDirectMem(BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::TEST8mi)), X86::RDI).addImm(0x1);
+
+        addRegOffset(BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, 24);
+        // POP RSI
+        BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::POP64r)).addReg(X86::RSI);
+        // POP RDI
+        BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::POP64r)).addReg(X86::RDI);
+        // POP R11
+        BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::POP64r)).addReg(X86::R11);
+
+        // XXX: Add this preamble to both OriginalMBB and CopyMBB to restore the state after the selection branch
+        // XXX: Note the reverse order instructions are put in the BB to use the begin() iterator
+        // OriginalMBB
+        {
+            if(X86MFI->getUsesRedZone())
+                // LEA adjust SP
+                addRegOffset(BuildMI(OriginalMBB, OriginalMBB.begin(), DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, 128);
+
+            // Restore RBP last 
+            addRegOffset(BuildMI(OriginalMBB, OriginalMBB.begin(), DebugLoc(), TII.get(X86::MOV64rm), X86::RBP), X86::RBP, false, RBPOffset);
+            // Restore RSP
+            addRegOffset(BuildMI(OriginalMBB, OriginalMBB.begin(), DebugLoc(), TII.get(X86::MOV64rm), X86::RSP), X86::RBP, false, RSPOffset);
+            // Restore EFLAGS
+            addRegOffset(BuildMI(OriginalMBB, OriginalMBB.begin(), DebugLoc(), TII.get(X86::MOV64rm), X86::RAX), X86::RBP, false, RAXOffset);
+            BuildMI(OriginalMBB, OriginalMBB.begin(), DebugLoc(), TII.get(X86::SAHF));
+            BuildMI(OriginalMBB, OriginalMBB.begin(), DebugLoc(), TII.get(X86::ADD8ri), X86::AL).addReg(X86::AL).addImm(INT8_MAX); //ggout ggin
+
+            /*dbgs() << "OriginalMBB\n";
+            OriginalMBB.dump(); //ggout
+            dbgs() << "+++++++++++++++\n";*/
+        }
+        // CopyMBB
+        {
+            if(X86MFI->getUsesRedZone())
+                // LEA adjust SP
+                addRegOffset(BuildMI(CopyMBB, CopyMBB.begin(), DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, 128);
+
+            // Restore RBP last 
+            addRegOffset(BuildMI(CopyMBB, CopyMBB.begin(), DebugLoc(), TII.get(X86::MOV64rm), X86::RBP), X86::RBP, false, RBPOffset);
+            // Restore RSP
+            addRegOffset(BuildMI(CopyMBB, CopyMBB.begin(), DebugLoc(), TII.get(X86::MOV64rm), X86::RSP), X86::RBP, false, RSPOffset);
+            // Restore EFLAGS
+            addRegOffset(BuildMI(CopyMBB, CopyMBB.begin(), DebugLoc(), TII.get(X86::MOV64rm), X86::RAX), X86::RBP, false, RAXOffset);
+            BuildMI(CopyMBB, CopyMBB.begin(), DebugLoc(), TII.get(X86::SAHF));
+            BuildMI(CopyMBB, CopyMBB.begin(), DebugLoc(), TII.get(X86::ADD8ri), X86::AL).addReg(X86::AL).addImm(INT8_MAX); //ggout ggin
+
+            /*dbgs() << "CopyMBB\n";
+            CopyMBB.dump(); //ggout
+            dbgs() << "+++++++++++++++\n";*/
+        }
+
+        SmallVector<MachineOperand, 1> Cond;
+        Cond.push_back(MachineOperand::CreateImm(X86::COND_E));
+        // XXX: "The CFG information in MBB.Predecessors and MBB.Successors must be valid before calling this function.", so add the successors
+        SelMBB.addSuccessor(&OriginalMBB);
+        SelMBB.addSuccessor(&CopyMBB);
+        TII.InsertBranch(SelMBB, &OriginalMBB, &CopyMBB, Cond, DebugLoc());
+    }
+}
+
+void X86FaultInjection::injectFault(MachineFunction &MF,
+        MachineInstr &MI,
+        std::vector<MCPhysReg> const &FIRegs,
+        MachineBasicBlock &InstSelMBB,
+        MachineBasicBlock &PreFIMBB,
+        SmallVector<MachineBasicBlock *, 4> &OpSelMBBs,
+        SmallVector<MachineBasicBlock *, 4> &FIMBBs,
         MachineBasicBlock &PostFIMBB) const
 {
     const X86Subtarget &Subtarget = MF.getSubtarget<X86Subtarget>();
@@ -74,15 +196,44 @@ void X86FaultInjection::injectFault(MachineFunction &MF, std::vector<MCPhysReg> 
         BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::PUSH64r)).addReg(X86::R11);
         // PUSH RDI for selInst arg1 (pointer stack, inject flag)
         BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::PUSH64r)).addReg(X86::RDI);
+#ifdef INSTR_PRINT
+        // PUSH RSI for selInst arg2 (uint8_t *, instr_str)
+        BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::PUSH64r)).addReg(X86::RSI);
+        BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::PUSH64r)).addReg(X86::RSI); //ggout TODO FIX alignment
+        std::string instr_str;
+        llvm::raw_string_ostream rso(instr_str);
+        MI.print(rso);
+        //dbgs() << rso.str() << "size:" << rso.str().size() <<"\n";
+#endif
         // Allocate stack space, XXX: 16-byte for alignment
-        addRegOffset(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, -16);
+        // int AlignedStackSpace = 16;
+#ifdef INSTR_PRINT
+        int AlignedStackSpace = 8/*Reg */ + rso.str().size()/*str size*/;
+#else
+        int AlignedStackSpace = 8/*Reg */;
+#endif
+        AlignedStackSpace = AlignedStackSpace + ( (AlignedStackSpace%16) > 0 ? (16 - (AlignedStackSpace%16)) : 0 );
+        addRegOffset(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, -AlignedStackSpace);
         // MOV RDI <= RSP, selInst arg1
         addRegOffset(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RDI), X86::RSP, false, 0);
+#ifdef INSTR_PRINT
+        // LEA RSI <= &op, doInject arg2 (uint64_t *, &op, 8B)
+        addRegOffset(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RSI), X86::RSP, false, 8);
+        int i = 0;
+        for(char c : rso.str()) {
+            addRegOffset(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::MOV64mi32)), X86::RSI, false, i*sizeof(char)).addImm(c);
+            i++;
+        }
+#endif
         BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::CALL64pcrel32)).addExternalSymbol("selInst");
         // TEST for jump (see code later), XXX: THIS SETS FLAGS FOR THE JMP, be careful not to mess with them until the branch
         addDirectMem(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::TEST8mi)), X86::RDI).addImm(0x1);
 
-        addRegOffset(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, 16);
+        addRegOffset(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, AlignedStackSpace);
+#ifdef INSTR_PRINT
+        BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::POP64r)).addReg(X86::RSI);
+        BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::POP64r)).addReg(X86::RSI); //ggout TODO FIX alignment
+#endif
         // POP RDI
         BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::POP64r)).addReg(X86::RDI);
         // POP R11
@@ -281,7 +432,7 @@ void X86FaultInjection::injectFault(MachineFunction &MF, std::vector<MCPhysReg> 
         else if(RegSizeBits <= 128 || RegSizeBits <=256 || RegSizeBits <=512 ) {
             addRegOffset(BuildMI(FIMBB, FIMBB.end(), DebugLoc(), TII.get(X86::PXORrm), ProxyFIReg).addReg(ProxyFIReg), X86::RSP, false, -BitmaskStackOffset);
         }
-        else 
+        else
             assert(false && "RegSizeBits is invalid!\n");
 
         FIMBB.addSuccessor(&PostFIMBB);

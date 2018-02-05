@@ -59,7 +59,10 @@ cl::opt<bool>
 FIEnableOpt("fi", cl::desc("Enable fault injection at the instruction level"), cl::init(false));
 
 cl::opt<bool>
-FIMBBEnableOpt("fi-mbb", cl::desc("Enable fault injection at the MBB level"), cl::init(false));
+FILiveinsMBBEnableOpt("fi-mbb-liveins", cl::desc("Enable fault injection at the livein registers of the MBB"), cl::init(false));
+
+cl::opt<bool>
+FIFFEnableOpt("fi-ff", cl::desc("Enable fast-forwarding optimization for instruction level FI"), cl::init(false));
 
 cl::list<std::string>
 FuncsOpt("fi-funcs", cl::CommaSeparated, cl::desc("Fault injected functions"), cl::value_desc("foo1, foo2, foo3, ..."));
@@ -82,10 +85,10 @@ namespace {
     };
 
     int TotalInstrCount;
-    int TotalSelInstrCount;
-    int TotalFIInstrCount;
+    int TotalTargetInstrCount;
     bool FIEnable;
-    bool FIMBBEnable;
+    bool FILiveinsMBBEnable;
+    bool FIFFEnable;
 
     Module *M;
   public:
@@ -93,9 +96,10 @@ namespace {
 
     MCFaultInjectionPass() : MachineFunctionPass(ID) {
       FIEnable = FIEnableOpt;
-      FIMBBEnable = FIMBBEnableOpt;
+      FILiveinsMBBEnable = FILiveinsMBBEnableOpt;
+      FIFFEnable = FIFFEnableOpt;
 
-      TotalInstrCount = 0; TotalSelInstrCount = 0; TotalFIInstrCount = 0;
+      TotalInstrCount = 0; TotalTargetInstrCount = 0;
     }
 
     bool doInitialization(Module &M) override {
@@ -119,7 +123,104 @@ namespace {
         printMachineBasicBlock(MBB);
     }
 
-    void injectFault(MachineInstr &MI, std::vector<MCPhysReg> const &FIRegs, InjectPoint IT) {
+    void instrumentInstructionOperands(MachineInstr &MI, SmallVector<MachineOperand *, 4> &EligibleOps, InjectPoint IT) {
+      MachineBasicBlock &MBB = *MI.getParent();
+      MachineFunction &MF = *MBB.getParent();
+      MachineBasicBlock::instr_iterator Iter = MI.getIterator();
+      const TargetFaultInjection *TFI = MF.getSubtarget().getTargetFaultInjection();
+      const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+      const MachineRegisterInfo &MRI = MF.getRegInfo();
+      const TargetRegisterInfo &TRI = *MRI.getTargetRegisterInfo();
+
+      // XXX: Inject errors only on super-registers to avoid duplicates
+        EligibleOps.erase(std::remove_if(EligibleOps.begin(), EligibleOps.end(),
+              [&TRI, &MRI, EligibleOps](MachineOperand *a) {
+              for(auto b : EligibleOps)
+              if(TRI.getSubRegIndex(b->getReg(), a->getReg())) return true;
+              return false;
+              }), EligibleOps.end());
+
+      // XXX: WARNING! CAUTION! This implementation assumes FI happens *ONLY* in DST registers, 
+      // thus it's always inserted after the instruction to instrument
+      // TODO: SRC Registers
+      //MachineOperand *MO = EligibleOps[rnd_idx];
+      //injectFault(*MI, MO->getReg(), (MO->isUse()?INJECT_BEFORE:INJECT_AFTER));
+      // XXX: Convert from MO vector to MCPhysReg vector. I'm keeping old code for continuity and 
+      // upgradeability
+        std::vector<MCPhysReg> FIRegs;
+      for(auto MO : EligibleOps)
+        if(MO->isDef()) {
+          //dbgs() << TRI.getName(MO->getReg()) << ", ";
+          FIRegs.push_back(MO->getReg());
+        }
+
+      MachineBasicBlock *InstSelMBB = MF.CreateMachineBasicBlock(nullptr);
+      MachineBasicBlock *PreFIMBB = MF.CreateMachineBasicBlock(nullptr);
+      SmallVector<MachineBasicBlock *, 4> OpSelMBBs;
+      SmallVector<MachineBasicBlock *, 4> FIMBBs;
+      for(unsigned i = 0; i < FIRegs.size(); i++) {
+        OpSelMBBs.push_back(MF.CreateMachineBasicBlock(nullptr));
+        FIMBBs.push_back(MF.CreateMachineBasicBlock(nullptr));
+      }
+      MachineBasicBlock *PostFIMBB = MF.CreateMachineBasicBlock(nullptr);
+
+      MachineFunction::iterator MBBI = MBB.getIterator();
+      MF.insert(++MBBI, InstSelMBB);
+
+      MBBI = InstSelMBB->getIterator();
+      MF.insert(++MBBI, PreFIMBB);
+
+      MBBI = PreFIMBB->getIterator();
+      for(auto OpSelMBB : OpSelMBBs) {
+        MF.insert(++MBBI, OpSelMBB);
+        MBBI = OpSelMBB->getIterator();
+      }
+
+      MBBI = OpSelMBBs.back()->getIterator();
+      for(auto FIMBB : FIMBBs) {
+        MF.insert(++MBBI, FIMBB);
+        MBBI = FIMBB->getIterator();
+      }
+
+      //MBBI = FIMBB->getIterator();
+      MBBI = FIMBBs.back()->getIterator();
+      MF.insert(++MBBI, PostFIMBB);
+
+      TFI->injectFault(MF, MI, FIRegs, *InstSelMBB, *PreFIMBB, OpSelMBBs, FIMBBs, *PostFIMBB);
+
+      if(IT == INJECT_BEFORE)
+        PostFIMBB->splice(PostFIMBB->end(), &MBB, Iter, MBB.end());
+      else if(IT == INJECT_AFTER)
+        PostFIMBB->splice(PostFIMBB->end(), &MBB, std::next(Iter), MBB.end());
+      else
+        assert(false && "InjectPoint is invalid!\n");
+
+      PostFIMBB->transferSuccessors(&MBB);
+
+      MachineBasicBlock *TBB = nullptr, *FBB = nullptr;
+      SmallVector<MachineOperand, 4> Cond;
+      // Add any additional MBB successors
+      if(!TII.analyzeBranch(MBB, TBB, FBB, Cond)) {
+        if(TBB) MBB.addSuccessor(TBB);
+        if(FBB) MBB.addSuccessor(FBB);
+      }
+
+      MBB.addSuccessor(InstSelMBB);
+      TII.InsertBranch(MBB, InstSelMBB, nullptr, None, DebugLoc());
+
+      /*dbgs() << "============= MBB ============\n"; //ggout
+        printMachineBasicBlock(MBB);
+        dbgs() << "============= EOM ============\n";*/
+      MBB.updateTerminator();
+      InstSelMBB->updateTerminator();
+      PreFIMBB->updateTerminator();
+      for(auto OpSelMBB : OpSelMBBs)
+        OpSelMBB->updateTerminator();
+      for(auto FIMBB : FIMBBs)
+        FIMBB->updateTerminator();
+    }
+
+    void instrumentRegs(MachineInstr &MI, std::vector<MCPhysReg> const &FIRegs, InjectPoint IT) {
       MachineBasicBlock &MBB = *MI.getParent();
       MachineFunction &MF = *MBB.getParent();
       MachineBasicBlock::instr_iterator Iter = MI.getIterator();
@@ -158,8 +259,7 @@ namespace {
       MBBI = FIMBBs.back()->getIterator();
       MF.insert(++MBBI, PostFIMBB);
 
-      //TFI->injectFault(MF, FIRegs, *PreFIMBB, *FIMBB, *PostFIMBB);
-      TFI->injectFault(MF, FIRegs, *InstSelMBB, *PreFIMBB, OpSelMBBs, FIMBBs, *PostFIMBB);
+      TFI->injectFault(MF, MI, FIRegs, *InstSelMBB, *PreFIMBB, OpSelMBBs, FIMBBs, *PostFIMBB);
 
       if(IT == INJECT_BEFORE)
         PostFIMBB->splice(PostFIMBB->end(), &MBB, Iter, MBB.end());
@@ -192,9 +292,258 @@ namespace {
       for(auto FIMBB : FIMBBs)
         FIMBB->updateTerminator();
     }
-    
+
+    void instrumentLiveinsMBB(MachineFunction &MF) {
+      std::vector<MachineBasicBlock *> MBBs;
+      /*dbgs() << "========== INJECTION ============\n";
+        printMachineFunction(MF); //ggout
+        dbgs() << "======= END OF INJECTION ========\n";*/
+
+      for(auto &MBB : MF) {
+        dbgs() << "MBB: " << MBB.getSymbol()->getName() << " ";
+        unsigned count = 0;
+        std::vector<MCPhysReg> FIRegs;
+        dbgs() << "LiveIns: ";
+        for(auto &Reg : MBB.liveins()) {
+          const MachineRegisterInfo &MRI = MF.getRegInfo();
+          const TargetRegisterInfo &TRI = *MRI.getTargetRegisterInfo();
+          dbgs() << TRI.getName(Reg.PhysReg) << " ";
+          FIRegs.push_back(Reg.PhysReg);
+          count++;
+        }
+
+        // XXX: Some MBB have no instructionts, hence check with empty()
+        if(count && !MBB.empty())
+          MBBs.push_back(&MBB);
+
+        dbgs() << "\n";
+        continue;
+      }
+
+      for(auto MBB : MBBs) {
+        unsigned count = 0;
+        std::vector<MCPhysReg> FIRegs;
+        dbgs() << "Inject: ";
+        dbgs() << "MBB: " << MBB->getName() << ", " << MBB->getSymbol()->getName() << " ";
+        for(auto &Reg : MBB->liveins()) {
+          const MachineRegisterInfo &MRI = MF.getRegInfo();
+          const TargetRegisterInfo &TRI = *MRI.getTargetRegisterInfo();
+          dbgs() << TRI.getName(Reg.PhysReg) << " ";
+          FIRegs.push_back(Reg.PhysReg);
+          count++;
+        }
+
+        assert(count > 0 && "No liveins?");
+        /*dbgs() << "===== BEGIN INST =====\n"; //ggout
+          MBB->instr_begin()->dump();
+          dbgs() << "===== END   INST =====\n";*/
+        //instrumentInstruction(*MBB->instr_begin(), FIRegs[rand], INJECT_BEFORE);
+        assert(FIRegs.size() > 0 && "FI Regs are 0!\n");
+        instrumentRegs(*MBB->instr_begin(), FIRegs, INJECT_BEFORE);
+      }
+    }
+
+    void instrumentMachineFunction(MachineFunction &MF, bool doDataFI, bool doControlFI, bool doFrameFI, bool injectDstRegs, bool injectSrcRegs) {
+      std::vector<MachineInstr *> vecFIInstr;
+
+      // Analyze instructions and put FI candidates in the vector vecFIInstr
+      for(auto &MBB : MF) {
+        dbgs() << "MBB: " << MBB.getSymbol()->getName() << "\n";
+        for(MachineBasicBlock::instr_iterator Iter = MBB.instr_begin(); Iter != MBB.instr_end(); Iter++) {
+          bool isData = false, isControl = false, isFrame = false;
+          MachineInstr &MI = *Iter;
+
+          if(!MI.isPseudo()) {
+            TotalInstrCount++;
+            /*dbgs() << "COUNT ";
+            MI.dump();*/ //ggout
+
+            if(MI.isBranch() || MI.isCall() || MI.isReturn())
+              isControl = true;
+            else if(MI.getFlag(MachineInstr::FrameSetup) || MI.getFlag(MachineInstr::FrameDestroy))
+              isFrame = true;
+            else
+              isData = true;
+
+            if( MI.isCall() || MI.isReturn() ) {
+              // TODO: Think about FI in CALL and RET. Cannot INJECT_AFTER since they change 
+              // control flow.  CALL := PUSH(IP) & JMP, RET := POP(IP)
+              dbgs() << "skip call, ret change control flow, inject after\n";
+              continue;
+            }
+            //dbgs() << (isData?"data, ":"") << (isControl?"control," :"") << (isFrame?"frame,":"") << " ";
+            //dbgs() << "isMem:" << (MI.mayLoadOrStore()?"true":"false") << ", ";
+
+            // Skip instructions based on FI inst types
+            if(!doFrameFI && isFrame) {
+              dbgs() << "skip frame instr\n";
+              continue;
+            }
+
+            if(!doDataFI && isData) {
+              dbgs() << "skip data instr\n";
+              continue;
+            }
+
+            if(!doControlFI && isControl) {
+              dbgs() << "skip control instr\n";
+              continue;
+            }
+
+            assert((isData || isFrame || isControl) && "Instruction type is invalid!\n");
+
+            bool isTargetInstr = false;
+            // Find if the instruction is eligible based on the operand selection
+            for(auto MOIter = MI.operands_begin(); MOIter != MI.operands_end(); MOIter++) {
+              MachineOperand &MO = *MOIter;
+
+              if(MO.isReg() && MO.getReg()) {
+                if(injectSrcRegs && MO.isUse())
+                  isTargetInstr = true;
+                else if(injectDstRegs && MO.isDef())
+                  isTargetInstr = true;
+              }
+
+              if(isTargetInstr)
+                break;
+            }
+
+            if(isTargetInstr) {
+              vecFIInstr.push_back(&MI);
+              TotalTargetInstrCount++;
+            }
+          }
+        }
+      }
+
+      for(auto MI : vecFIInstr) {
+        SmallVector<MachineOperand *, 4> EligibleOps;
+
+        dbgs() << "MBB: " << MI->getParent()->getSymbol()->getName() << ", ";
+        dbgs() << "FI-MI: ";
+        MI->dump();
+        for(auto MOIter = MI->operands_begin(); MOIter != MI->operands_end(); MOIter++) {
+          MachineOperand &MO = *MOIter;
+          //dbgs() << "MO:"; dbgs() << MO << ", ";
+          //if(MO.isReg())
+          //  dbgs() << "isReg: " << MO.isReg() << ", getReg: " << MO.getReg() << ", isUse: " << MO.isUse() << ", isDef: " << MO.isDef() << "\n";
+
+          if(MO.isReg() && MO.getReg()) {
+            if(injectSrcRegs && MO.isUse())
+              EligibleOps.push_back(&MO);
+            else if(injectDstRegs && MO.isDef())
+              EligibleOps.push_back(&MO);
+          }
+        }
+
+        assert(!EligibleOps.empty() && "EligibleOps cannot be empty!\n");
+
+        // XXX: only INJECT_AFTER, DST registers for now
+        instrumentInstructionOperands(*MI, EligibleOps, INJECT_AFTER);
+      }
+
+      dbgs() << "=============================================\n";
+      dbgs() << "TotalInstrCount: " << TotalInstrCount << ", TotalTargetInstrCount:" << TotalTargetInstrCount << "\n";
+      dbgs() << "=============================================\n";
+    }
+
+    std::tuple<uint64_t, uint64_t> findTargetInstructionsPair(SmallVector< std::pair< MachineInstr *, SmallVector<MachineOperand *, 4> >, 32> &vecFIInstr,
+        MachineBasicBlock &MBB,
+        bool doDataFI, bool doControlFI, bool doFrameFI, bool injectDstRegs, bool injectSrcRegs) {
+
+      uint64_t InstrCount = 0;
+      uint64_t TargetInstrCount = 0;
+
+      for(MachineBasicBlock::instr_iterator Iter = MBB.instr_begin(); Iter != MBB.instr_end(); Iter++) {
+        bool isData = false, isControl = false, isFrame = false;
+        MachineInstr &MI = *Iter;
+
+        if(!MI.isPseudo()) {
+          InstrCount++;
+          /*dbgs() << "COUNT ";
+          MI.dump();*/ //ggout
+
+          if(MI.isBranch() || MI.isCall() || MI.isReturn())
+            isControl = true;
+          else if(MI.getFlag(MachineInstr::FrameSetup) || MI.getFlag(MachineInstr::FrameDestroy))
+            isFrame = true;
+          else
+            isData = true;
+
+          if( MI.isCall() || MI.isReturn() ) {
+              // TODO: Think about FI in CALL and RET. Cannot INJECT_AFTER since they change 
+              // control flow.  CALL := PUSH(IP) & JMP, RET := POP(IP)
+              dbgs() << "skip call, ret change control flow, inject after\n";
+              continue;
+            }
+          //dbgs() << (isData?"data, ":"") << (isControl?"control," :"") << (isFrame?"frame,":"") << " ";
+          //dbgs() << "isMem:" << (MI.mayLoadOrStore()?"true":"false") << ", ";
+
+          // Skip instructions based on FI inst types
+          if(!doFrameFI && isFrame) {
+            dbgs() << "skip frame instr\n";
+            continue;
+          }
+
+          if(!doDataFI && isData) {
+            dbgs() << "skip data instr\n";
+            continue;
+          }
+
+          if(!doControlFI && isControl) {
+            dbgs() << "skip control instr\n";
+            continue;
+          }
+
+          assert((isData || isFrame || isControl) && "Instruction type is invalid!\n");
+
+          SmallVector<MachineOperand *, 4> EligibleOps;
+
+          // Find if the instruction is eligible based on the operand selection
+          for(auto MOIter = MI.operands_begin(); MOIter != MI.operands_end(); MOIter++) {
+            MachineOperand &MO = *MOIter;
+
+            if(MO.isReg() && MO.getReg()) {
+              if(injectSrcRegs && MO.isUse())
+                EligibleOps.push_back(&MO);
+              else if(injectDstRegs && MO.isDef())
+                EligibleOps.push_back(&MO);
+            }
+          }
+
+          if(!EligibleOps.empty()) {
+            vecFIInstr.push_back(std::make_pair(&MI, EligibleOps));
+            TargetInstrCount++;
+          }
+        }
+      }
+
+      assert(TargetInstrCount == vecFIInstr.size() && "TargetInstrCount != vecFIInstr.size()");
+      return std::make_tuple(InstrCount, TargetInstrCount);
+    }
+
+    void instrumentInstructionsInMachineBasicBlock(
+        SmallVector< std::pair< MachineInstr *, SmallVector<MachineOperand *, 4> >, 32> &vecFIInstr,
+        MachineFunction &MF) {
+      //TODO: fix no operand discovery
+      //for(auto MI : vecFIInstr.first) {
+      for(auto I : vecFIInstr) {
+        MachineInstr *MI = I.first;
+        SmallVector<MachineOperand *, 4> &EligibleOps = I.second;
+
+        dbgs() << "MBB: " << MI->getParent()->getSymbol()->getName() << ", ";
+        dbgs() << "FI-MI: ";
+        MI->dump();
+
+        assert(!EligibleOps.empty() && "EligibleOps cannot be empty!\n");
+
+        // XXX: only INJECT_AFTER, DST registers for now
+        instrumentInstructionOperands(*MI, EligibleOps, INJECT_AFTER);
+      }
+    }
+
     bool runOnMachineFunction(MachineFunction &MF) override {
-      if(!FIEnable && !FIMBBEnable)
+      if(!FIEnable && !FILiveinsMBBEnable)
         return false;
 
       if(!FuncsOpt.empty())
@@ -217,70 +566,28 @@ namespace {
         }
       }
 
-      if(FIMBBEnable) {
-        std::vector<MachineBasicBlock *> MBBs;
-        /*dbgs() << "========== INJECTION ============\n";
-        printMachineFunction(MF); //ggout
-        dbgs() << "======= END OF INJECTION ========\n";*/
-
-        for(auto &MBB : MF) {
-          dbgs() << "MBB: " << MBB.getSymbol()->getName() << " ";
-          unsigned count = 0;
-          std::vector<MCPhysReg> FIRegs;
-          dbgs() << "LiveIns: ";
-          for(auto &Reg : MBB.liveins()) {
-            const MachineRegisterInfo &MRI = MF.getRegInfo();
-            const TargetRegisterInfo &TRI = *MRI.getTargetRegisterInfo();
-            dbgs() << TRI.getName(Reg.PhysReg) << " ";
-            FIRegs.push_back(Reg.PhysReg);
-            count++;
-          }
-
-          // XXX: Some MBB have no instructionts, hence check with empty()
-          if(count && !MBB.empty())
-            MBBs.push_back(&MBB);
-
-          dbgs() << "\n";
-          continue;
-        }
-
-        for(auto MBB : MBBs) {
-          unsigned count = 0;
-          std::vector<MCPhysReg> FIRegs;
-          dbgs() << "Inject: ";
-          dbgs() << "MBB: " << MBB->getName() << ", " << MBB->getSymbol()->getName() << " ";
-          for(auto &Reg : MBB->liveins()) {
-            const MachineRegisterInfo &MRI = MF.getRegInfo();
-            const TargetRegisterInfo &TRI = *MRI.getTargetRegisterInfo();
-            dbgs() << TRI.getName(Reg.PhysReg) << " ";
-            FIRegs.push_back(Reg.PhysReg);
-            count++;
-          }
-
-          assert(count > 0 && "No liveins?");
-          /*dbgs() << "===== BEGIN INST =====\n"; //ggout
-          MBB->instr_begin()->dump();
-          dbgs() << "===== END   INST =====\n";*/
-          //injectFault(*MBB->instr_begin(), FIRegs[rand], INJECT_BEFORE);
-          assert(FIRegs.size() > 0 && "FI Regs are 0!\n");
-          injectFault(*MBB->instr_begin(), FIRegs, INJECT_BEFORE);
-        }
+      if(FILiveinsMBBEnable) {
+        //dbgs() << "<<<<<<< Using function call for instrumentMBB >>>>>>>>>\n";
+        instrumentLiveinsMBB(MF);
       }
       else if(FIEnable) {
-        std::vector<MachineInstr *> vecFIInstr;
-
         // TODO: Think whether error checking should be better, i.e., an invalid option at the
         // moment is ignored, perhaps reporting back an error is better
         bool doDataFI = false, doControlFI = false, doFrameFI = false;
         if(!InstTypesOpt.empty()) {
-          if(std::find(InstTypesOpt.begin(), InstTypesOpt.end(), "data") != InstTypesOpt.end())
-            doDataFI = true;
 
-          if(std::find(InstTypesOpt.begin(), InstTypesOpt.end(), "control") != InstTypesOpt.end())
-            doControlFI = true;
+          if(std::find(InstTypesOpt.begin(), InstTypesOpt.end(), "*") != InstTypesOpt.end())
+            doDataFI = doControlFI = doFrameFI = true;
+          else {
+            if(std::find(InstTypesOpt.begin(), InstTypesOpt.end(), "data") != InstTypesOpt.end())
+              doDataFI = true;
 
-          if(std::find(InstTypesOpt.begin(), InstTypesOpt.end(), "frame") != InstTypesOpt.end())
-            doFrameFI = true;
+            if(std::find(InstTypesOpt.begin(), InstTypesOpt.end(), "control") != InstTypesOpt.end())
+              doControlFI = true;
+
+            if(std::find(InstTypesOpt.begin(), InstTypesOpt.end(), "frame") != InstTypesOpt.end())
+              doFrameFI = true;
+          }
 
           assert((doDataFI || doControlFI || doFrameFI) && "FI instruction types is invalid!");
         }
@@ -299,128 +606,179 @@ namespace {
         dbgs() << "=============================================\n";
         dbgs() << "MF: " << MF.getName() << "\n";
 
-        // Analyze instructions and put FI candidates in the vector vecFIInstr
-        for(auto &MBB : MF) {
-          //dbgs() << "MBB: " << MBB.getSymbol()->getName() << "\n";
-          for(MachineBasicBlock::instr_iterator Iter = MBB.instr_begin(); Iter != MBB.instr_end(); Iter++) {
-            bool isData = false, isControl = false, isFrame = false;
-            MachineInstr &MI = *Iter;
 
-            if(!MI.isPseudo()) { 
-              TotalInstrCount++;
-              //MI.dump();
+        /* XXX: GGEORGAK WORK IN PROGRESS -- INSTRUMENT BASIC BLOCK: BRANCH TO 1) ORIGINAL CODE INTACT OR 2) INSTRUMENT MBB */
+        if(FIFFEnable) {
+          dbgs() << "Fast-forwarding enabled\n";
+          const TargetFaultInjection *TFI = MF.getSubtarget().getTargetFaultInjection();
+          const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+          //const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+          {
+            /*dbgs() << "============== MF code =============\n";
+            for(auto &MBB: MF) { //ggout
+              MBB.dump();
+            }
+            dbgs() << "========== End of MF code ==========\n";*/
+            // Populate the vector of FI Target MachineBasicBlocks
+            SmallVector<MachineBasicBlock *, 8> TargetMBBs;
+            for(auto &MBB: MF) {
+              dbgs() << "Target MBB: " << MBB.getSymbol()->getName() << "\n";
+              // XXX: Split MBB in Call instruction to count instructions correctly across function calls.
+              // The original basic block is split in two blocks: before and including the call instruction 
+              // and after the call instruction. The new block after the call is going to be examined and 
+              // added to the potential iterations in the next iteration of the outer loop.
+              for(auto &MI : MBB) {
+                /*if(MI.isCall()) { //ggout
+                  dbgs() << "MI.isTerminator: " << MI.isTerminator() << "\n"; //ggout
+                  dbgs() << "MI.isLast: " << ( std::next(MI.getIterator()) == MBB.instr_end() ) << "\n"; //ggout
+                }*/
+                if( MI.isCall() && !( MI.isTerminator() || ( std::next(MI.getIterator()) == MBB.instr_end() ) ) ) {
+                  /*dbgs() << "ORIGINAL\n"; //ggout
+                  MBB.dump();
+                  dbgs() << "====================================\n";*/
 
-              if(MI.isBranch() || MI.isCall() || MI.isReturn())
-                isControl = true;
-              else if(MI.getFlag(MachineInstr::FrameSetup) || MI.getFlag(MachineInstr::FrameDestroy))
-                isFrame = true;
-              else
-                isData = true;
+                  MachineBasicBlock *SplitMBB = MF.CreateMachineBasicBlock(nullptr);
+                  MF.insert(++MBB.getIterator(), SplitMBB);
 
-              //dbgs() << (isData?"data, ":"") << (isControl?"control," :"") << (isFrame?"frame,":"") << " ";
-              //dbgs() << "isMem:" << (MI.mayLoadOrStore()?"true":"false") << ", ";
+                  SplitMBB->splice(SplitMBB->end(), &MBB, std::next(MI.getIterator()), MBB.end());
+                  SplitMBB->transferSuccessors(&MBB);
+                  MBB.addSuccessor(SplitMBB);
+                  //TII.InsertBranch(MBB, SplitMBB, nullptr, None, DebugLoc()); // XXX: is this needed?
+                  /*dbgs() << "====================================\n"; //ggout
+                  dbgs() << "NEW\n";
+                  MBB.dump();
+                  SplitMBB->dump();
+                  dbgs() << "====================================\n"; //ggout*/
 
-              // Skip instructions based on FI inst types
-              if(!doFrameFI && isFrame) {
-                dbgs() << "skip frame instr\n";
-                continue;
-              }
+                  MBB.updateTerminator();
+                  SplitMBB->updateTerminator();
+                  /*dbgs() << "====================================\n"; //ggout
+                  dbgs() << "UPDATED\n";
+                  MBB.dump();
+                  SplitMBB->dump();
+                  dbgs() << "====================================\n"; //ggout*/
 
-              if(!doDataFI && isData) {
-                dbgs() << "skip data instr\n";
-                continue;
-              }
-
-              if(!doControlFI && isControl) {
-                dbgs() << "skip control instr\n";
-                continue;
-              }
-
-              assert((isData || isFrame || isControl) && "Instruction type is invalid!\n");
-
-              bool isSelInstr = false;
-              // Find if the instruction is eligible based on the operand selection
-              for(auto MOIter = MI.operands_begin(); MOIter != MI.operands_end(); MOIter++) {
-                MachineOperand &MO = *MOIter;
-
-                if(MO.isReg() && MO.getReg()) {
-                  if(injectSrcRegs && MO.isUse())
-                    isSelInstr = true;
-                  else if(injectDstRegs && MO.isDef())
-                    isSelInstr = true;
-                }
-
-                if(isSelInstr)
                   break;
+                }
               }
 
-              if(isSelInstr) {
-                vecFIInstr.push_back(&MI);
-                TotalSelInstrCount++;
+              SmallVector< std::pair< MachineInstr *, SmallVector< MachineOperand *, 4 > >, 32> vecFIInstr;
+              // XXX: If no target instructions, skip from instrumentation
+              uint64_t InstrCount;
+              uint64_t TargetInstrCount;
+              std::tie( InstrCount, TargetInstrCount ) = findTargetInstructionsPair(vecFIInstr, MBB, doDataFI, doControlFI, doFrameFI, injectDstRegs, injectSrcRegs);
+              // Skip non-fi targeted blocks
+              if( TargetInstrCount > 0)
+                TargetMBBs.push_back(&MBB);
+              else {
+                dbgs() << "SKIPPING MBB: " << MBB.getSymbol()->getName() << "\n"; //ggout
+                MBB.dump();
               }
+
+            }
+
+            for(auto MBB: TargetMBBs) {
+              MachineBasicBlock *CopyMBB = MF.CreateMachineBasicBlock(nullptr);
+              MachineBasicBlock *OriginalMBB= MF.CreateMachineBasicBlock(nullptr);
+
+              // Add SelMBB before MBB
+              MachineFunction::iterator MBBI = MBB->getIterator();
+              MF.insert(++MBBI, OriginalMBB);
+              MBBI = OriginalMBB->getIterator();
+              // Add CopyMBB after OriginalMBB
+              MF.insert(++MBBI, CopyMBB);
+
+              OriginalMBB->splice(OriginalMBB->end(), MBB, MBB->begin(), MBB->end());
+              OriginalMBB->transferSuccessors(MBB);
+
+              // Copy instructions
+              for(MachineBasicBlock::instr_iterator Iter = OriginalMBB->instr_begin(); Iter != OriginalMBB->instr_end(); Iter++) {
+                MachineInstr *MI = &*Iter;
+                MachineInstr *CopyMI = MF.CloneMachineInstr(MI);
+                CopyMBB->push_back(CopyMI);
+              }
+
+              // Copy successors
+              for(MachineBasicBlock::succ_iterator Iter = OriginalMBB->succ_begin(); Iter != OriginalMBB->succ_end(); Iter++)
+                CopyMBB->addSuccessor(*Iter);
+
+              //SmallVector<MachineInstr *, 32> vecFIInstr;
+              SmallVector< std::pair< MachineInstr *, SmallVector< MachineOperand *, 4 > >, 32> vecFIInstr;
+              uint64_t InstrCount;
+              uint64_t TargetInstrCount;
+              // XXX: TODO: analyze CopyMBB before the updateTerminators()!
+              std::tie( InstrCount, TargetInstrCount ) = findTargetInstructionsPair(vecFIInstr, *CopyMBB, doDataFI, doControlFI, doFrameFI, injectDstRegs, injectSrcRegs);
+              // XXX: Note TotalInstrCount might not be the same in FF because not all blocks are considered
+              TotalInstrCount += InstrCount;
+              TotalTargetInstrCount += TargetInstrCount;
+
+              assert(TargetInstrCount > 0 && "TargetInstrCount cannot be 0!\n"); //ggout ggin
+              // XXX: Note FF method may count less total instructions because it doesn't process MBBs with no Targets
+              dbgs() << "=============================================\n";
+              dbgs() << "MBB: " << MBB->getSymbol()->getName() << " InstrCount: " << InstrCount << ", TargetInstrCount:" << TargetInstrCount << "\n";
+              dbgs() << "=============================================\n";
+
+              // XXX: instrument instrutions before injectMBB
+              instrumentInstructionsInMachineBasicBlock(vecFIInstr, MF);
+
+              // XXX: injectMachineBlock after OriginalMBB and CopyMBB have their instructions populated
+              // because it needs to add a preamble for restoring the context state after selMBB
+              TFI->injectMachineBasicBlock(*MBB, *OriginalMBB, *CopyMBB, TargetInstrCount);
+
+              MBB->updateTerminator();
+
+              MachineBasicBlock *TBB = nullptr, *FBB = nullptr;
+              SmallVector<MachineOperand, 4> Cond;
+              // XXX: Need to update terminators *ONLY* if it's an analyzable branch (e.g., NOT an indirect branch)
+              if( !TII.analyzeBranch(*OriginalMBB, TBB, FBB, Cond) )
+                OriginalMBB->updateTerminator();
+              if( !TII.analyzeBranch(*CopyMBB, TBB, FBB, Cond) )
+                CopyMBB->updateTerminator();
+
+              /*CopyMBB->dump();
+                dbgs() << "ORIGINAL\n";
+                MBB.dump(); */ //ggout
             }
           }
+
+          dbgs() << "=============================================\n";
+          dbgs() << "MF: " << MF.getName() << " TotalInstrCount: " << TotalInstrCount << ", TotalTargetInstrCount:" << TotalTargetInstrCount << "\n";
+          dbgs() << "=============================================\n";
+
+          /* END OF WIP */
         }
-
-        for(auto MI : vecFIInstr) {
-          std::vector<MachineOperand *> EligibleOps;
-
-          dbgs() << "MBB: " << MI->getParent()->getSymbol()->getName() << ", ";
-          dbgs() << "FI-MI: ";
-          MI->dump();
-          for(auto MOIter = MI->operands_begin(); MOIter != MI->operands_end(); MOIter++) {
-            MachineOperand &MO = *MOIter;
-            //dbgs() << "MO:"; dbgs() << MO << ", ";
-            //if(MO.isReg())
-            //  dbgs() << "isReg: " << MO.isReg() << ", getReg: " << MO.getReg() << ", isUse: " << MO.isUse() << ", isDef: " << MO.isDef() << "\n";
-
-            if(MO.isReg() && MO.getReg()) {
-              if(injectSrcRegs && MO.isUse())
-                EligibleOps.push_back(&MO);
-              else if(injectDstRegs && MO.isDef())
-                EligibleOps.push_back(&MO);
+        else {
+          /*dbgs() << "instrument by machine basic block\n"; //ggout
+          SmallVector<MachineBasicBlock *, 8> TargetMBBs;
+            for(auto &MBB: MF) {
+              TargetMBBs.push_back(&MBB);
             }
-          }
+            for(auto MBB: TargetMBBs) {
+              //SmallVector<MachineInstr *, 32> vecFIInstr;
+              SmallVector< std::pair< MachineInstr *, SmallVector< MachineOperand *, 4 > >, 32> vecFIInstr;
+              uint64_t InstrCount;
+              uint64_t TargetInstrCount;
+              std::tie( InstrCount, TargetInstrCount ) = findTargetInstructionsPair(vecFIInstr, *MBB, doDataFI, doControlFI, doFrameFI, injectDstRegs, injectSrcRegs);
+              dbgs() << "TargetInstrCount: " << TargetInstrCount << "\n"; //ggout
+              MBB->dump(); // ggout
+              TotalInstrCount += InstrCount;
+              TotalTargetInstrCount += TargetInstrCount;
 
-          if(EligibleOps.empty())
-            dbgs() << "No suitable operands to inject error\n";
-          else {
-            const MachineRegisterInfo &MRI = MF.getRegInfo();
-            const TargetRegisterInfo &TRI = *MRI.getTargetRegisterInfo();
+              dbgs() << "=============================================\n";
+              dbgs() << "MBB: " << MBB->getSymbol()->getName() << " InstrCount: " << InstrCount << ", TargetInstrCount:" << TargetInstrCount << "\n";
+              dbgs() << "=============================================\n";
 
-            // XXX: Inject errors only on super-registers to avoid duplicates
-            EligibleOps.erase(std::remove_if(EligibleOps.begin(), EligibleOps.end(),
-                [&TRI, &MRI, EligibleOps](MachineOperand *a) {
-                for(auto b : EligibleOps)
-                  if(TRI.getSubRegIndex(b->getReg(), a->getReg())) return true;
-                return false;
-                }), EligibleOps.end());
-            dbgs() << "EligibleOps: " << EligibleOps.size() << ", ";
-            // XXX: WARNING! CAUTION! This implementation assumes FI happens *ONLY* in DST registers, 
-            // thus it's always inserted after the instruction to instrument
-            // TODO: SRC Registers
-            //MachineOperand *MO = EligibleOps[rnd_idx];
-            //injectFault(*MI, MO->getReg(), (MO->isUse()?INJECT_BEFORE:INJECT_AFTER));
-            // XXX: Convert from MO vector to MCPhysReg vector. I'm keeping old code for continuity and 
-            // upgradeability
-            std::vector<MCPhysReg> FIRegs;
-            for(auto MO : EligibleOps)
-              if(MO->isDef()) {
-                dbgs() << TRI.getName(MO->getReg()) << ", ";
-                FIRegs.push_back(MO->getReg());
-              }
 
-            // XXX: AGAIN, only INJECT_AFTER
-            injectFault(*MI, FIRegs, INJECT_AFTER);
-            TotalFIInstrCount++;
-          }
+              instrumentInstructionsInMachineBasicBlock(vecFIInstr, MF
+            }
+
+            dbgs() << "=============================================\n";
+            dbgs() << "MF: " << MF.getName() << " TotalInstrCount: " << TotalInstrCount << ", TotalTargetInstrCount:" << TotalTargetInstrCount << "\n";
+            dbgs() << "=============================================\n";*/
+
+            dbgs() << "instrumentMachineFunction\n"; //ggout
+              instrumentMachineFunction(MF, doDataFI, doControlFI, doFrameFI, injectDstRegs, injectSrcRegs);
         }
-
-        dbgs() << "=============================================\n";
-        dbgs() << "TotalInstrCount: " << TotalInstrCount << ", TotalSelInstrCount:" << TotalSelInstrCount 
-          << ", TotalFIInstrCount: " << TotalFIInstrCount << "\n";
-        dbgs() << "=============================================\n";
-
       }
 
       return true;

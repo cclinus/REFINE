@@ -26,10 +26,15 @@ namespace llvm {
         public:
             TargetFaultInjection();
             virtual ~TargetFaultInjection();
-            virtual void injectFault(MachineFunction &MF, std::vector<MCPhysReg> const &FIRegs,
-                    MachineBasicBlock &InstSelMBB, MachineBasicBlock &PreFIMBB,
-                    SmallVector<MachineBasicBlock *, 4> &OpSelMBBs, SmallVector<MachineBasicBlock *, 4> &FIMBBs,
+            virtual void injectFault(MachineFunction &MF,
+                    MachineInstr &MI,
+                    std::vector<MCPhysReg> const &FIRegs,
+                    MachineBasicBlock &InstSelMBB,
+                    MachineBasicBlock &PreFIMBB,
+                    SmallVector<MachineBasicBlock *, 4> &OpSelMBBs,
+                    SmallVector<MachineBasicBlock *, 4> &FIMBBs,
                     MachineBasicBlock &PostFIMBB) const = 0;
+            virtual void injectMachineBasicBlock(MachineBasicBlock &SelMBB, MachineBasicBlock &MBB, MachineBasicBlock &CopyMBB, uint64_t TargetInstrCount) const = 0;
     };
 } // end namespace llvm
 
