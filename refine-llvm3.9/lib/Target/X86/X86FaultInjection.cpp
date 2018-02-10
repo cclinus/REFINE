@@ -153,9 +153,9 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
         unsigned RegSize = TRC->getSize();
         MaxRegSize = RegSize > MaxRegSize ? RegSize : MaxRegSize;
 
-        dbgs() << "FIReg:" << FIReg << ", RegName:" << TRI.getName(FIReg) << ", RegSizeBits:" << 8*RegSize<< ", ";
+        //dbgs() << "FIReg:" << FIReg << ", RegName:" << TRI.getName(FIReg) << ", RegSizeBits:" << 8*RegSize<< ", ";
     }
-    dbgs() << "\n";
+    //dbgs() << "\n";
 
     assert(MaxRegSize > 0 && "MaxRegSize must be > 0\n");
 
@@ -202,7 +202,8 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
         BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::PUSH64r)).addReg(X86::RSI); //ggout TODO FIX alignment
         std::string instr_str;
         llvm::raw_string_ostream rso(instr_str);
-        MI.print(rso);
+        //MI.print(rso, true); //skip operands
+        MI.print(rso); //include operands
         //dbgs() << rso.str() << "size:" << rso.str().size() <<"\n";
 #endif
         // Allocate stack space, XXX: 16-byte for alignment
