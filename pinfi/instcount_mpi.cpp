@@ -18,6 +18,7 @@ KNOB<string> instrument_file(KNOB_MODE_WRITEONCE, "pintool",
     "fi-instr", "pin.instrument.txt", "shows details of the instruction instrumentation");
 
 static UINT64 fi_inst = 0;
+static int rank = -1;
 
 std::fstream instrument_ofstream;
 
@@ -56,7 +57,9 @@ VOID Fini(INT32 code, VOID *v)
 {
   // Write to a file since cout and cerr maybe closed by the application
   ofstream OutFile;
-  OutFile.open(instcount_file.Value().c_str());
+  stringstream ss;
+  ss << rank << "." << instcount_file.Value();
+  OutFile.open(ss.str().c_str());
   OutFile.setf(ios::showbase);
   OutFile << fi_inst << endl;
 
@@ -82,7 +85,14 @@ int main(int argc, char * argv[])
 
   configInstSelector();
 
-  instrument_ofstream.open(instrument_file.Value().c_str(), std::fstream::out);
+  char *rank_str = getenv("OMPI_COMM_WORLD_RANK");
+  assert(rank_str != NULL && "rank_str = NULL, cannot read env variable for MPI rank\n");
+  rank = atoi(rank_str);
+  cout << "rank: " << rank << endl; //ggout
+
+  stringstream ss;
+  ss << rank << "." << instrument_file.Value();
+  instrument_ofstream.open(ss.str().c_str(), std::fstream::out);
   assert(instrument_ofstream.is_open() && "Cannot open instrumentation output file\n");
 
   // Register Instruction to be called to instrument instructions

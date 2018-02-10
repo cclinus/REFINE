@@ -10,7 +10,7 @@ bool isValidInst(INS ins) {
     //LOG("Invalid RTN " + INS_Disassemble(ins) + "\n");
     return false;
   }
-  
+
   SEC Sec = RTN_Sec(Rtn);
   if(!SEC_Valid(Sec)) {
     //LOG("Invalid SEC " + INS_Disassemble(ins) + "\n");

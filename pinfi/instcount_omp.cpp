@@ -17,13 +17,20 @@ KNOB<string> instcount_file(KNOB_MODE_WRITEONCE, "pintool",
 KNOB<string> instrument_file(KNOB_MODE_WRITEONCE, "pintool",
     "fi-instr", "pin.instrument.txt", "shows details of the instruction instrumentation");
 
-static UINT64 fi_inst = 0;
+#define MAX_THREADS 256
+static UINT64 fi_inst[MAX_THREADS] __attribute__((__aligned__(64))) = { 0 };
 
 std::fstream instrument_ofstream;
 
-VOID countInst(UINT32 c)
+// XXX: Pin *SKIPS* id 1 for thread id, need to track max_tid discovered and output accordingly
+static int max_tid = -1;
+
+VOID countInst(THREADID tid, UINT32 c)
 {
-  fi_inst += c;
+  // XXX: need to cast tid, it's unsigned
+  if(max_tid < (int)tid) max_tid = tid;
+  fi_inst[tid] += c;
+  //cout << "thread=" << tid << ", targets=" << fi_inst[tid] << endl; //ggout
 }
 
 // Pin calls this function every time a new instruction is encountered
@@ -45,7 +52,7 @@ VOID CountInst(TRACE trace, VOID *v)
       }
 
     if(static_count > 0) {
-      BBL_InsertCall(bbl, IPOINT_BEFORE, (AFUNPTR)countInst, IARG_UINT32, static_count, IARG_END);
+      BBL_InsertCall(bbl, IPOINT_BEFORE, (AFUNPTR)countInst, IARG_THREAD_ID, IARG_UINT32, static_count, IARG_END);
       //BBL_InsertCall(bbl, IPOINT_BEFORE, (AFUNPTR)countInst, IARG_UINT32, static_count, IARG_ADDRINT, BBL_Address(bbl), IARG_ADDRINT, ( BBL_Address(bbl) + BBL_Size(bbl) ), IARG_END);
       //cerr << "Found BBL at " << std::hex << "0x" << BBL_Address(bbl) << " - " << "0x" << ( BBL_Address(bbl) + BBL_Size(bbl) ) << endl;
     }
@@ -58,7 +65,12 @@ VOID Fini(INT32 code, VOID *v)
   ofstream OutFile;
   OutFile.open(instcount_file.Value().c_str());
   OutFile.setf(ios::showbase);
-  OutFile << fi_inst << endl;
+  int i;
+  for(i=0; i<=max_tid; i++) {
+    if(fi_inst[i] == 0)
+      continue;
+    OutFile << "thread=" << i << ", targets=" << fi_inst[i] << endl;
+  }
 
   OutFile.close();
 }
