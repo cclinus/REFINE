@@ -4,8 +4,11 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include <assert.h>
+#include <execinfo.h>
+#include <string.h>
 
-void selInst(uint64_t *) __attribute__((preserve_all));
+void selInst(uint64_t *, uint8_t *) __attribute__((preserve_all));
+void selMBB(uint64_t *, uint64_t) __attribute__((preserve_all));
 void doInject(unsigned , uint64_t *, uint64_t *, uint8_t *) __attribute__((preserve_all));
 void init() __attribute__((constructor));
 void fini() __attribute__((destructor));
@@ -23,15 +26,15 @@ uint64_t genrand64_int64(void);
 #define LM UINT64_C(0x7FFFFFFF) /* Least significant 31 bits */
 
 /* The array for the state vector */
-static uint64_t mt[NN]; 
+static uint64_t mt[NN];
 /* mti==NN+1 means mt[NN] is not initialized */
-static int mti=NN+1; 
+static int mti=NN+1;
 
 /* initializes mt[NN] with a seed */
 void init_genrand64(uint64_t seed)
 {
     mt[0] = seed;
-    for (mti=1; mti<NN; mti++) 
+    for (mti=1; mti<NN; mti++)
         mt[mti] =  (UINT64_C(6364136223846793005) * (mt[mti-1] ^ (mt[mti-1] >> 62)) + mti);
 }
 
@@ -46,8 +49,8 @@ uint64_t genrand64_int64(void)
 
         /* if init_genrand64() has not been called, */
         /* a default initial seed is used     */
-        if (mti == NN+1) 
-            init_genrand64(UINT64_C(5489)); 
+        if (mti == NN+1)
+            init_genrand64(UINT64_C(5489));
 
         for (i=0;i<NN-MM;i++) {
             x = (mt[i]&UM)|(mt[i+1]&LM);
@@ -62,7 +65,7 @@ uint64_t genrand64_int64(void)
 
         mti = 0;
     }
-  
+
     x = mt[mti++];
 
     x ^= (x >> 29) & UINT64_C(0x5555555555555555);
@@ -75,41 +78,111 @@ uint64_t genrand64_int64(void)
 
 uint64_t dynFICount = 0;
 uint64_t dynFIIndex = 0;
+//XXX: for debug reasons
+//uint64_t dynFIIndex_mbb = 0;
 uint64_t dynFITarget = 0;
+// default is random injection
+int randomInjection = 1;
+uint64_t op_num;
+uint64_t op_size;
+unsigned bit_pos;
+
 const char *inscount_fname = "refine-inscount.txt";
-const char *out_fname = "refine-inject.txt";
+const char *inject_fname = "refine-inject.txt";
 FILE *ins_fp, *inj_fp;
 
-void selInst(uint64_t *ret)
+void selMBB(uint64_t *ret, uint64_t num_insts)
 {
     *ret = 0;
-    dynFIIndex++;
+    //*ret = 1; //ggout
+    //printf("Called SelMBB num_insts: %llu\n", num_insts);
+    if( dynFICount && ( dynFIIndex < dynFITarget ) && dynFITarget <= ( dynFIIndex + num_insts ) ) {
+        //printf("CHECKING dynFITarget %llu dynFIIndex %llu num_insts %llu\n", dynFITarget, dynFIIndex, num_insts);
+        //assert(0 && "Should never happen!\n"); //ggout
+        //printf("DETAILED sim\n");
+        //*ret = 0;
+        //printf("FI dynFIIndex %llu dynFIIndex_mbb %llu num_insts %llu\n", dynFIIndex, dynFIIndex_mbb, num_insts);
+        *ret = 1;
+    }
+    else {
+        /*printf("before dynFIIndex %llu dynFIIndex_mbb %llu num_insts %llu\n", dynFIIndex, dynFIIndex_mbb, num_insts);
+          assert(dynFIIndex == dynFIIndex_mbb && "dynFIIndex != dynFIIndex_mbb");*/
+        //dynFIIndex_mbb += num_insts;
+        dynFIIndex += num_insts;
+        //printf("after dynFIIndex %llu dynFIIndex_mbb %llu num_insts %llu\n", dynFIIndex, dynFIIndex_mbb, num_insts);
+    }
+}
 
-    if(dynFICount)
-        if(dynFIIndex == dynFITarget)
-            *ret = 1;
+void selInst(uint64_t *ret, uint8_t *instr_str)
+{
+    /*void *callstack[2];
+    int frames = backtrace(callstack, 2);
+    char **strs = backtrace_symbols(callstack, frames);
+    int i;
+    for(i=0; i<frames; i++)
+        printf("%s\n", strs[i]);
+    free(strs);
+    assert(0 && "early abort first");*/
+    *ret = 0;
+    dynFIIndex++;
+    /*void *callstack[2];
+    int frames = backtrace(callstack, 2);
+    char **strs = backtrace_symbols(callstack, frames);
+    if(strstr(strs[1], "vranlc") != NULL)*/
+    //printf("%llu %s\n", dynFIIndex, instr_str);
+    /*free(strs);*/
+
+    //return; // ggout
+
+    if( dynFICount && ( dynFIIndex == dynFITarget ) ){
+        *ret = 1;
+        printf("INJECT %llu %s\n", dynFIIndex, instr_str);
+        //assert(0 && "early abort"); //ggout
+    }
 }
 
 void doInject(unsigned num_ops, uint64_t *op, uint64_t *size, uint8_t *bitmask)
 {
-    *op = genrand64_int64()%num_ops;
+    unsigned bitflip;
+    if(randomInjection) {
+        printf("DO RANDOM INJECTION!\n");
+        *op = genrand64_int64()%num_ops;
 
-    // XXX: size is in bytes, multiply by 8 for bits
-    unsigned bitflip = (genrand64_int64()%(8*size[*op]));
+        // XXX: size is in bytes, multiply by 8 for bits
+        bitflip = (genrand64_int64()%(8*size[*op]));
 
-    unsigned i;
-    for(i=0; i<size[*op]; i++)
-        bitmask[i] = 0;
+        unsigned i;
+        for(i=0; i<size[*op]; i++)
+            bitmask[i] = 0;
 
-    unsigned bit_i = bitflip/8;
-    unsigned bit_j = bitflip%8;
+        unsigned bit_i = bitflip/8;
+        unsigned bit_j = bitflip%8;
 
-    bitmask[bit_i] = (1U << bit_j);
+        bitmask[bit_i] = (1U << bit_j);
 
-    fprintf(inj_fp, "fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", dynFIIndex, *op, size[*op], bitflip);
-    //printf("INJECTING FAULT: fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", dynFIIndex, *op, size[*op], bitflip);
-    //fflush(stdout);
-    fflush(inj_fp);
+        // Write random injection specifics to file
+        fprintf(inj_fp, "fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", dynFIIndex, *op, size[*op], bitflip);
+        fflush(inj_fp);
+    }
+    else {
+        printf("DO REPRODUCIBLE INJECTION!\n");
+        *op = op_num;
+        bitflip = bit_pos;
+
+        printf("op_size %llu size[*op] %llu\n", op_size, size[*op]);
+        assert( ( op_size == size[*op] ) && "op_size != size[*op]");
+        unsigned i;
+        for(i=0; i<op_size; i++)
+            bitmask[i] = 0;
+
+        unsigned bit_i = bitflip/8;
+        unsigned bit_j = bitflip%8;
+
+        bitmask[bit_i] = (1U << bit_j);
+    }
+
+    printf("INJECTING FAULT: fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", dynFIIndex, *op, size[*op], bitflip);
+    fflush(stdout);
 }
 
 void init()
@@ -126,10 +199,27 @@ void init()
     if(ins_fp) {
         fscanf(ins_fp, "%"PRIu64"\n", &dynFICount);
         assert(dynFICount > 0 && "dynFICount is invalid!\n");
-        // Instruction count starts from 1
-        dynFITarget = (genrand64_int64()%dynFICount) + 1;
-        inj_fp = fopen(out_fname, "w");
-        assert(inj_fp != NULL && "Error opening output file\n");
+
+        inj_fp = fopen(inject_fname, "r");
+        // reproduce injection
+        if(inj_fp) {
+            printf("REPRODUCE INJECTION\n");
+            fscanf(inj_fp, "fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", &dynFITarget, &op_num, &op_size, &bit_pos);
+            assert(dynFITarget > 0 && "dynFITarget <= 0!\n");
+            assert(op_num >= 0 && "op_num < 0!\n");
+            assert(op_size > 0 && "op_size <=0!\n");
+            assert(bit_pos >= 0 && "bit_pos < 0!\n");
+            randomInjection = 0;
+        }
+        // create random injection target
+        else {
+            printf("RANDOM INJECTION\n");
+            // Instruction count starts from 1
+            dynFITarget = (genrand64_int64()%dynFICount) + 1;
+            printf("TARGET %llu\n", dynFITarget);
+            inj_fp = fopen(inject_fname, "w");
+            assert(inj_fp != NULL && "Error opening output file\n");
+        }
     }
 }
 
@@ -143,6 +233,10 @@ void fini()
         fprintf(stderr, "PROFILING: dynamic count of FI instructions: %"PRIu64"\n", dynFIIndex);
         ins_fp = fopen(inscount_fname, "w");
         assert(ins_fp != NULL && "Error opening inscount file\n");
+        /*if(dynFIIndex_mbb) {
+            printf("dynFIIndex %llu dynFIIndex_mbb %llu\n", dynFIIndex, dynFIIndex_mbb); //ggout
+            assert(dynFIIndex == dynFIIndex_mbb && "dynFIIndex from selInst and selMBB differ!\n");
+        }*/
         fprintf(ins_fp, "%"PRIu64"\n", dynFIIndex);
         fclose(ins_fp);
     }
