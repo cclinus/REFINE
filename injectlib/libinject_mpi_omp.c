@@ -79,7 +79,7 @@ uint64_t genrand64_int64(void)
 }
 // OpenMP, per-thread variables
 #define MAX_THREADS 256
-uint64_t dynFIIndex[MAX_THREADS] __attribute__((__aligned(64)))= { 0 };
+uint64_t dynFIIndex[MAX_THREADS] __attribute__((aligned(64)))= { 0 };
 int max_tid = -1;
 
 // MPI

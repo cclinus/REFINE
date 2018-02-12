@@ -14,6 +14,8 @@ void doInject(unsigned , uint64_t *, uint64_t *, uint8_t *) __attribute__((prese
 void init() __attribute__((constructor));
 void fini() __attribute__((destructor));
 
+// TODO: convert Mersenne-Twister to a standalone file and link with libinject
+// TODO: Compile libinject to produce a lib and link with executable
 /* initializes mt[NN] with a seed */
 void init_genrand64(uint64_t seed);
 
