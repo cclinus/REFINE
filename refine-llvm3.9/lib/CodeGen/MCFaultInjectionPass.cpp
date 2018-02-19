@@ -199,9 +199,12 @@ namespace {
         assert(false && "InjectPoint is invalid!\n");
 
       PostFIMBB->transferSuccessors(&MBB);
-
       MachineBasicBlock *TBB = nullptr, *FBB = nullptr;
       SmallVector<MachineOperand, 4> Cond;
+
+      if(!TII.analyzeBranch(*PostFIMBB, TBB, FBB, Cond))
+        PostFIMBB->updateTerminator();
+
       // Add any additional MBB successors
       if(!TII.analyzeBranch(MBB, TBB, FBB, Cond)) {
         if(TBB) MBB.addSuccessor(TBB);
@@ -272,9 +275,12 @@ namespace {
         assert(false && "InjectPoint is invalid!\n");
 
       PostFIMBB->transferSuccessors(&MBB);
-
       MachineBasicBlock *TBB = nullptr, *FBB = nullptr;
       SmallVector<MachineOperand, 4> Cond;
+
+      if(!TII.analyzeBranch(*PostFIMBB, TBB, FBB, Cond))
+        PostFIMBB->updateTerminator();
+
       // Add any additional MBB successors
       if(!TII.analyzeBranch(MBB, TBB, FBB, Cond)) {
         if(TBB) MBB.addSuccessor(TBB);
@@ -521,6 +527,11 @@ namespace {
             SmallVector<MachineBasicBlock *, 8> TargetMBBs;
             for(auto &MBB: MF) {
               //dbgs() << "Target MBB: " << MBB.getSymbol()->getName() << "\n";
+
+              // XXX: Splitting hurts performance by creating artificial basic blocks. With splitting, instruction
+              // indexing follows execution order. Without splitting, instruction indexing follows BB order. Random
+              // injection is unaffected. Vote for performance for now.
+#if 0
               // XXX: Split MBB in Call instruction to count instructions correctly across function calls.
               // The original basic block is split in two blocks: before and including the call instruction 
               // and after the call instruction. The new block after the call is going to be examined and 
@@ -559,6 +570,7 @@ namespace {
                   break;
                 }
               }
+#endif
 
               SmallVector< std::pair< MachineInstr *, SmallVector< MachineOperand *, 4 > >, 32> vecFIInstr;
               // XXX: If no target instructions, skip from instrumentation
@@ -590,7 +602,8 @@ namespace {
               MBBI = OriginalMBB->getIterator();
               // Add CopyMBB after OriginalMBB
               //MF.insert(++MBBI, CopyMBB);
-              MF.insert(MF.end(), CopyMBB); //ggout, the above one is tested and works
+              // If CopyMBB at function's end we save a jump from OriginalMBB (common case), CopyMBB jumps back
+              MF.insert(MF.end(), CopyMBB);
 
               OriginalMBB->splice(OriginalMBB->end(), MBB, MBB->begin(), MBB->end());
               OriginalMBB->transferSuccessors(MBB);

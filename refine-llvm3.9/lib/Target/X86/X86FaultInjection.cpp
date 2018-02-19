@@ -61,7 +61,7 @@ void X86FaultInjection::injectMachineBasicBlock(MachineBasicBlock &SelMBB, Machi
 
         // MOV RSI <= MBB.size(), selMBB arg2 (uint64_t, number of instructions)
         BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::MOV64ri), X86::RSI).addImm(TargetInstrCount);
-        // Allocate stack space, XXX: 24-byte for alignment since pushed 3 regs (r11, rdi, rsi)
+        // Allocate stack space, XXX:  - 8B for 16B alignment since pushed 3 regs (r11, rdi, rsi)
         addRegOffset(BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, -24);
         // MOV RDI <= RSP, selMBB arg1
         addRegOffset(BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RDI), X86::RSP, false, 0);
@@ -199,19 +199,20 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
 #ifdef INSTR_PRINT
         // PUSH RSI for selInst arg2 (uint8_t *, instr_str)
         BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::PUSH64r)).addReg(X86::RSI);
-        BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::PUSH64r)).addReg(X86::RSI); //ggout TODO FIX alignment
+        // XXX: Align to 16B (3Regs * 8B !/ 16B), TODO: Create routine to auto-handle alignment
+        addRegOffset(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, -8);
         std::string instr_str;
         llvm::raw_string_ostream rso(instr_str);
         //MI.print(rso, true); //skip operands
         MI.print(rso); //include operands
-        //dbgs() << rso.str() << "size:" << rso.str().size() <<"\n";
+        //dbgs() << rso.str() << "size:" << rso.str().size() << "c_str size:" << strlen(rso.str().c_str())+1 << "\n";
 #endif
         // Allocate stack space, XXX: 16-byte for alignment
         // int AlignedStackSpace = 16;
 #ifdef INSTR_PRINT
-        int AlignedStackSpace = 8/*Reg */ + rso.str().size()/*str size*/;
+        int AlignedStackSpace = rso.str().size()+1/*str size + 1 for NUL char*/;
 #else
-        int AlignedStackSpace = 8/*Reg */;
+        int AlignedStackSpace = 8/*16B align for 3 Regs (R11, RDI, RSI)*/;
 #endif
         AlignedStackSpace = AlignedStackSpace + ( (AlignedStackSpace%16) > 0 ? (16 - (AlignedStackSpace%16)) : 0 );
         addRegOffset(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, -AlignedStackSpace);
@@ -222,9 +223,11 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
         addRegOffset(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RSI), X86::RSP, false, 8);
         int i = 0;
         for(char c : rso.str()) {
-            addRegOffset(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::MOV64mi32)), X86::RSI, false, i*sizeof(char)).addImm(c);
+            addRegOffset(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::MOV8mi)), X86::RSI, false, i*sizeof(char)).addImm(c);
             i++;
         }
+        // Add terminating NUL character
+        addRegOffset(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::MOV8mi)), X86::RSI, false, i*sizeof(char)).addImm(0);
 #endif
         BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::CALL64pcrel32)).addExternalSymbol("selInst");
         // TEST for jump (see code later), XXX: THIS SETS FLAGS FOR THE JMP, be careful not to mess with them until the branch
@@ -232,8 +235,9 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
 
         addRegOffset(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, AlignedStackSpace);
 #ifdef INSTR_PRINT
+        // XXX: add from previous alignment
+        addRegOffset(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, 8);
         BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::POP64r)).addReg(X86::RSI);
-        BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::POP64r)).addReg(X86::RSI); //ggout TODO FIX alignment
 #endif
         // POP RDI
         BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::POP64r)).addReg(X86::RDI);
