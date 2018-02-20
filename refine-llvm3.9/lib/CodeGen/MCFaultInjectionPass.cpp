@@ -448,9 +448,71 @@ namespace {
               MBB.dump();
             }
             dbgs() << "========== End of MF code ==========\n";*/
-            // Populate the vector of FI Target MachineBasicBlocks
-            SmallVector<MachineBasicBlock *, 8> TargetMBBs;
+            // There should be an 1-to-1 correspondence between MBBs and CloneMBBs
+            // Keep a list of original MBBs (first) with their Clone (second)
+            SmallVector< std::pair<MachineBasicBlock *, MachineBasicBlock *>, 32> MBBs;
             for(auto &MBB: MF) {
+              MachineBasicBlock *CloneMBB = MF.CreateMachineBasicBlock(nullptr);
+              MBBs.push_back(std::make_pair(&MBB, CloneMBB));
+            }
+
+            // Populate detach clones
+            for(auto MBBPair : MBBs) {
+              // Create a new, no-FI MBB to fast-forward execution when no more faults inject.
+              // Saves the overhead within a function, but selMBB will be invoked again when 
+              // calling a function, at the function head only. No way (yet) of FF function calls
+              MachineBasicBlock *MBB = MBBPair.first;
+              MachineBasicBlock *CloneMBB = MBBPair.second;
+              MF.push_back(CloneMBB);
+
+              // Copy instructions
+              for(MachineBasicBlock::instr_iterator Iter = MBB->instr_begin(); Iter != MBB->instr_end(); Iter++) {
+                MachineInstr *MI = &*Iter;
+                // XXX: avoid copying non-duplicatable instructions: pseudo instructions, DBG or EH labels
+                if(MI->isNotDuplicable())
+                  continue;
+                MachineInstr *CopyMI = MF.CloneMachineInstr(MI);
+                CloneMBB->push_back(CopyMI);
+              }
+              // Copy successors
+              for(MachineBasicBlock::succ_iterator Iter = MBB->succ_begin(); Iter != MBB->succ_end(); Iter++)
+                CloneMBB->addSuccessor(*Iter);
+
+              /*dbgs() << "Original:";
+                MBB->dump();
+                dbgs() << "Clone:";
+                CloneMBB->dump();*/ //ggout
+            }
+
+            // Move the successors to other CloneMBBs to skip selMBB calls
+            for(auto MBBPair: MBBs) {
+              MachineBasicBlock *CloneMBB = MBBPair.second;
+              for(MachineBasicBlock::succ_iterator Iter = CloneMBB->succ_begin(); Iter != CloneMBB->succ_end(); Iter++) {
+                // Find MBB to redirect to its clone
+                auto it = std::find_if( MBBs.begin(), MBBs.end(),
+                    [Iter](const std::pair<MachineBasicBlock *, MachineBasicBlock *> &element){ return element.first == *Iter;} );
+                assert(it != MBBs.end() && "Could not find successor in MBBs!\n");
+                CloneMBB->ReplaceUsesOfBlockWith(*Iter, it->second);
+              }
+              //CloneMBB->dump(); //ggout
+            }
+
+            MachineBasicBlock *TBB = nullptr, *FBB = nullptr;
+            SmallVector<MachineOperand, 4> Cond;
+            for(auto MBBPair: MBBs) {
+              //dbgs() << "Terminator update for:";
+              //CloneMBB->dump(); //ggout
+              MachineBasicBlock *CloneMBB = MBBPair.second;
+              if( !TII.analyzeBranch(*CloneMBB, TBB, FBB, Cond) )
+                CloneMBB->updateTerminator();
+            }
+
+            // Populate the vector of FI Target MachineBasicBlocks
+            SmallVector< std::pair<MachineBasicBlock *, MachineBasicBlock *>, 32> TargetMBBs;
+            //for(auto MBB: MBBs) {
+            dbgs() << "VERSION 12\n"; //ggout
+            for(auto MBBPair: MBBs) {
+              MachineBasicBlock *MBB = MBBPair.first;
               //dbgs() << "Target MBB: " << MBB.getSymbol()->getName() << "\n";
 
               // XXX: Splitting hurts performance by creating artificial basic blocks. With splitting, instruction
@@ -465,11 +527,11 @@ namespace {
                 /*if(MI.isCall()) { //ggout
                   dbgs() << "MI.isTerminator: " << MI.isTerminator() << "\n"; //ggout
                   dbgs() << "MI.isLast: " << ( std::next(MI.getIterator()) == MBB.instr_end() ) << "\n"; //ggout
-                }*/
+                  }*/
                 if( MI.isCall() && !( MI.isTerminator() || ( std::next(MI.getIterator()) == MBB.instr_end() ) ) ) {
                   /*dbgs() << "ORIGINAL\n"; //ggout
-                  MBB.dump();
-                  dbgs() << "====================================\n";*/
+                    MBB.dump();
+                    dbgs() << "====================================\n";*/
 
                   MachineBasicBlock *SplitMBB = MF.CreateMachineBasicBlock(nullptr);
                   MF.insert(++MBB.getIterator(), SplitMBB);
@@ -479,32 +541,33 @@ namespace {
                   MBB.addSuccessor(SplitMBB);
                   //TII.InsertBranch(MBB, SplitMBB, nullptr, None, DebugLoc()); // XXX: is this needed?
                   /*dbgs() << "====================================\n"; //ggout
-                  dbgs() << "NEW\n";
-                  MBB.dump();
-                  SplitMBB->dump();
-                  dbgs() << "====================================\n"; //ggout*/
+                    dbgs() << "NEW\n";
+                    MBB.dump();
+                    SplitMBB->dump();
+                    dbgs() << "====================================\n"; //ggout*/
 
                   MBB.updateTerminator();
                   SplitMBB->updateTerminator();
                   /*dbgs() << "====================================\n"; //ggout
-                  dbgs() << "UPDATED\n";
-                  MBB.dump();
-                  SplitMBB->dump();
-                  dbgs() << "====================================\n"; //ggout*/
+                    dbgs() << "UPDATED\n";
+                    MBB.dump();
+                    SplitMBB->dump();
+                    dbgs() << "====================================\n"; //ggout*/
 
                   break;
                 }
               }
 #endif
 
+              // vecFIInstr stores FI instructions and vector of eligible operands
               SmallVector< std::pair< MachineInstr *, SmallVector< MachineOperand *, 4 > >, 32> vecFIInstr;
               // XXX: If no target instructions, skip from instrumentation
               uint64_t InstrCount;
               uint64_t TargetInstrCount;
-              std::tie( InstrCount, TargetInstrCount ) = findTargetInstructionsPair(vecFIInstr, MBB, doDataFI, doControlFI, doFrameFI, injectDstRegs, injectSrcRegs);
+              std::tie( InstrCount, TargetInstrCount ) = findTargetInstructionsPair(vecFIInstr, *MBB, doDataFI, doControlFI, doFrameFI, injectDstRegs, injectSrcRegs);
               // Skip non-fi targeted blocks
               if( TargetInstrCount > 0)
-                TargetMBBs.push_back(&MBB);
+                TargetMBBs.push_back(MBBPair);
               else {
                 //dbgs() << "SKIPPING MBB: " << MBB.getSymbol()->getName() << "\n"; //ggout
                 //MBB.dump();
@@ -514,15 +577,24 @@ namespace {
                 dbgs() << "EHPad\n";
                 MBB.dump();
                 assert(0 && "early abort\n"); //ggout
-              }*/
+                }*/
             }
 
-            for(auto MBB: TargetMBBs) {
+            for(auto MBBPair: TargetMBBs) {
+              MachineBasicBlock *MBB = MBBPair.first;
+              MachineBasicBlock *CloneMBB = MBBPair.second;
+              // Create MBBs for jump detach, jump fi, original BB instrumented, copy Inst instrumented
+              MachineBasicBlock *JmpDetachMBB = MF.CreateMachineBasicBlock(nullptr);
+              MachineBasicBlock *JmpFIMBB = MF.CreateMachineBasicBlock(nullptr);
               MachineBasicBlock *CopyMBB = MF.CreateMachineBasicBlock(nullptr);
-              MachineBasicBlock *OriginalMBB= MF.CreateMachineBasicBlock(nullptr);
+              MachineBasicBlock *OriginalMBB = MF.CreateMachineBasicBlock(nullptr);
 
               // Add SelMBB before MBB
               MachineFunction::iterator MBBI = MBB->getIterator();
+              MF.insert(++MBBI, JmpDetachMBB);
+              MBBI = JmpDetachMBB->getIterator();
+              MF.insert(++MBBI, JmpFIMBB);
+              MBBI = JmpFIMBB->getIterator();
               MF.insert(++MBBI, OriginalMBB);
               MBBI = OriginalMBB->getIterator();
               // Add CopyMBB after OriginalMBB
@@ -532,6 +604,14 @@ namespace {
 
               OriginalMBB->splice(OriginalMBB->end(), MBB, MBB->begin(), MBB->end());
               OriginalMBB->transferSuccessors(MBB);
+
+              MBB->addSuccessor(JmpDetachMBB);
+              MBB->addSuccessor(JmpFIMBB);
+
+              JmpDetachMBB->addSuccessor(CloneMBB);
+
+              JmpFIMBB->addSuccessor(OriginalMBB);
+              JmpFIMBB->addSuccessor(CopyMBB);
 
               // Copy instructions
               for(MachineBasicBlock::instr_iterator Iter = OriginalMBB->instr_begin(); Iter != OriginalMBB->instr_end(); Iter++) {
@@ -568,7 +648,11 @@ namespace {
 
               // XXX: injectMachineBlock after OriginalMBB and CopyMBB have their instructions populated
               // because it needs to add a preamble for restoring the context state after selMBB
-              TFI->injectMachineBasicBlock(*MBB, *OriginalMBB, *CopyMBB, TargetInstrCount);
+              TFI->injectMachineBasicBlock(*MBB, *JmpDetachMBB, *JmpFIMBB, *OriginalMBB, *CopyMBB, TargetInstrCount);
+
+              // Insert the branch since JmpDetachMBB jumps unconditionally, hence no target specific codegen
+              // XXX: MUST happen after injectMachineBasicBlock to be added as the terminator
+              TII.InsertBranch(*JmpDetachMBB, CloneMBB, nullptr, None, DebugLoc());
 
               MBB->updateTerminator();
 
@@ -577,6 +661,7 @@ namespace {
               // XXX: Need to update terminators *ONLY* if it's an analyzable branch (e.g., NOT an indirect branch)
               if( !TII.analyzeBranch(*OriginalMBB, TBB, FBB, Cond) )
                 OriginalMBB->updateTerminator();
+              TBB = nullptr; FBB = nullptr; Cond.clear();
               if( !TII.analyzeBranch(*CopyMBB, TBB, FBB, Cond) )
                 CopyMBB->updateTerminator();
 

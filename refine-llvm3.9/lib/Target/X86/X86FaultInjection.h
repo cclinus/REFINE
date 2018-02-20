@@ -16,7 +16,12 @@ namespace llvm {
                     SmallVector<MachineBasicBlock *, 4> &OpSelMBBs,
                     SmallVector<MachineBasicBlock *, 4> &FIMBBs,
                     MachineBasicBlock &PostFIMBB) const override;
-            void injectMachineBasicBlock(MachineBasicBlock &SelMBB, MachineBasicBlock &MBB, MachineBasicBlock &CopyMBB, uint64_t TargetInstrCount) const override;
+            void injectMachineBasicBlock(MachineBasicBlock &SelMBB,
+                    MachineBasicBlock &JmpDetachMBB,
+                    MachineBasicBlock &JmpFIMBB,
+                    MachineBasicBlock &MBB,
+                    MachineBasicBlock &CopyMBB,
+                    uint64_t TargetInstrCount) const override;
     };
 } // end namespace llvm
 
