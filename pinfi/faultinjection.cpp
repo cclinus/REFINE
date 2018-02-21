@@ -51,7 +51,6 @@ VOID injectReg(VOID *ip, UINT64 idx, UINT32 op, REG reg, PIN_REGISTER *val)
             << ", reg=" << REG_StringShort(reg) << ", bitflip=" << fi_bit_flip << ", addr=" << hexstr(ip) << std::endl;
         fi_output_fstream.close();
     }
-    fi_bit_flip=12; //ggout
 
     cerr << "INJECT fi_index=" << fi_iterator << ", fi_instr_index=" << idx << ", op=" << op
             << ", reg=" << REG_StringShort(reg) << ", bitflip=" << fi_bit_flip << ", addr=" << hexstr(ip) << std::endl;
