@@ -62,7 +62,7 @@ cl::opt<bool>
 FILiveinsMBBEnableOpt("fi-mbb-liveins", cl::desc("Enable fault injection at the livein registers of the MBB"), cl::init(false));
 
 cl::opt<bool>
-FIFFEnableOpt("fi-ff", cl::desc("Enable fast-forwarding optimization for instruction level FI"), cl::init(false));
+InstrBBEnableOpt("fi-bb", cl::desc("Enable basic block instrumentation for fast-forwarding instruction level FI"), cl::init(false));
 
 cl::list<std::string>
 FuncsOpt("fi-funcs", cl::CommaSeparated, cl::desc("Fault injected functions"), cl::value_desc("foo1, foo2, foo3, ..."));
@@ -91,7 +91,7 @@ namespace {
     int TotalTargetInstrCount;
     bool FIEnable;
     bool FILiveinsMBBEnable;
-    bool FIFFEnable;
+    bool InstrBBEnable;
 
     Module *M;
   public:
@@ -100,7 +100,7 @@ namespace {
     MCFaultInjectionPass() : MachineFunctionPass(ID) {
       FIEnable = FIEnableOpt;
       FILiveinsMBBEnable = FILiveinsMBBEnableOpt;
-      FIFFEnable = FIFFEnableOpt;
+      InstrBBEnable = InstrBBEnableOpt;
 
       TotalInstrCount = 0; TotalTargetInstrCount = 0;
     }
@@ -293,7 +293,7 @@ namespace {
         if(!MI.isPseudo()) {
           InstrCount++;
           /*dbgs() << "COUNT ";
-            MI.dump(); */ //ggout
+            MI.dump(); */
           //dbgs() << "MI name:" << TII.getName( MI.getOpcode() ) << "\n"; //ggout
 
           if(MI.isBranch() || MI.isCall() || MI.isReturn())
@@ -436,8 +436,7 @@ namespace {
           assert((injectDstRegs || injectSrcRegs) && "FI register types is invalid!");
         }
 
-        /* XXX: GGEORGAK WORK IN PROGRESS -- INSTRUMENT BASIC BLOCK: BRANCH TO 1) ORIGINAL CODE INTACT OR 2) INSTRUMENT MBB */
-        if(FIFFEnable) {
+        if(InstrBBEnable) {
           //dbgs() << "Fast-forwarding enabled\n";
           const TargetFaultInjection *TFI = MF.getSubtarget().getTargetFaultInjection();
           const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
@@ -509,8 +508,7 @@ namespace {
 
             // Populate the vector of FI Target MachineBasicBlocks
             SmallVector< std::pair<MachineBasicBlock *, MachineBasicBlock *>, 32> TargetMBBs;
-            //for(auto MBB: MBBs) {
-            dbgs() << "VERSION 12\n"; //ggout
+            dbgs() << "VERSION 14\n"; //ggout
             for(auto MBBPair: MBBs) {
               MachineBasicBlock *MBB = MBBPair.first;
               //dbgs() << "Target MBB: " << MBB.getSymbol()->getName() << "\n";
@@ -572,12 +570,6 @@ namespace {
                 //dbgs() << "SKIPPING MBB: " << MBB.getSymbol()->getName() << "\n"; //ggout
                 //MBB.dump();
               }
-
-              /*if(MBB.isEHPad()) {
-                dbgs() << "EHPad\n";
-                MBB.dump();
-                assert(0 && "early abort\n"); //ggout
-                }*/
             }
 
             for(auto MBBPair: TargetMBBs) {
@@ -674,8 +666,6 @@ namespace {
           dbgs() << "=============================================\n";
           dbgs() << "MF: " << MF.getName() << " TotalInstrCount: " << TotalInstrCount << ", TotalTargetInstrCount:" << TotalTargetInstrCount << "\n";
           dbgs() << "=============================================\n";
-
-          /* END OF WIP */
         }
         else {
           SmallVector<MachineBasicBlock *, 8> TargetMBBs;
