@@ -14,42 +14,42 @@
 KNOB<string> instcount_file(KNOB_MODE_WRITEONCE, "pintool",
     "o", "pin.instcount.txt", "specify instruction count file name");
 
-KNOB<string> instrument_file(KNOB_MODE_WRITEONCE, "pintool",
-    "fi-instr", "pin.instrument.txt", "shows details of the instruction instrumentation");
+KNOB<bool> save_instr(KNOB_MODE_WRITEONCE, "pintool",
+    "save-instr", "0", "shows details of the instruction instrumentation");
 
-static UINT64 fi_inst = 0;
+KNOB<string> instrument_file(KNOB_MODE_WRITEONCE, "pintool",
+    "instr-file", "pin.instrument.txt", "shows details of the instruction instrumentation");
+
+static UINT64 fi_iterator = 0;
 
 std::fstream instrument_ofstream;
 
 VOID countInst(UINT32 c)
 {
-  fi_inst += c;
+  fi_iterator += c;
 }
 
 // Pin calls this function every time a new instruction is encountered
 VOID CountInst(TRACE trace, VOID *v)
 {
-  for( BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl) ) {
-    int static_count = 0;
-    // Insert a call to countInst before every bbl, passing the number of target FI instructions
-    for(INS ins = BBL_InsHead(bbl); INS_Valid(ins); ins = INS_Next(ins) )
-      if(isValidInst(ins)) {
-        static_count++;
+  if(isValidTrace(trace))
+    for( BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl) ) {
+      int num_insts = 0;
+      // Insert a call to countInst before every bbl, passing the number of target FI instructions
+      for(INS ins = BBL_InsHead(bbl); INS_Valid(ins); ins = INS_Next(ins) )
+        if(isValidInst(ins)) {
+          num_insts++;
 
-        instrument_ofstream << "addr=" << hexstr(INS_Address(ins)) << ", instr=\"" << INS_Disassemble(ins) << "\"" << std::endl;
+          if(save_instr.Value())
+            instrument_ofstream << "img=" << IMG_Name(SEC_Img(RTN_Sec(INS_Rtn(ins)))) << ", addr=" << hexstr(INS_Address(ins))
+              << ", instr=\"" << INS_Disassemble(ins) << "\"" << std::endl;
+        }
 
-	/*INS_InsertPredicatedCall(
-	    ins, IPOINT_BEFORE, (AFUNPTR)countInst,
-	    IARG_UINT32, 1,
-	    IARG_END);*/
+      if(num_insts > 0) {
+        BBL_InsertCall(bbl, IPOINT_BEFORE, (AFUNPTR)countInst, IARG_UINT32, num_insts, IARG_END);
+        //cerr << "Found BBL at " << std::hex << "0x" << BBL_Address(bbl) << " - " << "0x" << ( BBL_Address(bbl) + BBL_Size(bbl) ) << endl;
       }
-
-    if(static_count > 0) {
-      BBL_InsertCall(bbl, IPOINT_BEFORE, (AFUNPTR)countInst, IARG_UINT32, static_count, IARG_END);
-      //BBL_InsertCall(bbl, IPOINT_BEFORE, (AFUNPTR)countInst, IARG_UINT32, static_count, IARG_ADDRINT, BBL_Address(bbl), IARG_ADDRINT, ( BBL_Address(bbl) + BBL_Size(bbl) ), IARG_END);
-      //cerr << "Found BBL at " << std::hex << "0x" << BBL_Address(bbl) << " - " << "0x" << ( BBL_Address(bbl) + BBL_Size(bbl) ) << endl;
     }
-  }
 }
 
 VOID Fini(INT32 code, VOID *v)
@@ -58,9 +58,12 @@ VOID Fini(INT32 code, VOID *v)
   ofstream OutFile;
   OutFile.open(instcount_file.Value().c_str());
   OutFile.setf(ios::showbase);
-  OutFile << fi_inst << endl;
+  OutFile << "fi_index=" << fi_iterator << endl;
 
   OutFile.close();
+
+  if(save_instr.Value())
+    instrument_ofstream.close();
 }
 
 /* ===================================================================== */
@@ -80,12 +83,14 @@ int main(int argc, char * argv[])
   // Initialize pin
   if (PIN_Init(argc, argv)) return Usage();
 
-  configInstSelector();
+  //configInstSelector();
 
-  instrument_ofstream.open(instrument_file.Value().c_str(), std::fstream::out);
-  assert(instrument_ofstream.is_open() && "Cannot open instrumentation output file\n");
+  if(save_instr.Value()) {
+    instrument_ofstream.open(instrument_file.Value().c_str(), std::fstream::out);
+    assert(instrument_ofstream.is_open() && "Cannot open instrumentation output file\n");
+  }
 
-  // Register Instruction to be called to instrument instructions
+  // Register CountInst to be called to instrument instructions in a trace
   TRACE_AddInstrumentFunction(CountInst, 0);
 
   // Register Fini to be called when the application exits

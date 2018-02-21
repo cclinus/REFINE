@@ -1,30 +1,37 @@
 #include "utils.h"
+#include <iostream>
 
-bool isValidInst(INS ins) {
-/**
- * IMPORTANT: This is to make sure fault injections are done at the .text 
- * of the compiled code, instead of at libraries or .init/.fini sections
- */
-  RTN Rtn = INS_Rtn(ins);
+KNOB<string> instrument_libs(KNOB_MODE_WRITEONCE, "pintool",
+    "instr-libs", "", "comma-separated list of libraries for instruction instrumentation");
+
+bool isValidTrace(TRACE trace) {
+  /**
+   * IMPORTANT: This is to make sure fault injections are done at the .text 
+   * of the compiled code, instead of at libraries or .init/.fini sections
+   */
+  RTN Rtn = TRACE_Rtn(trace);
+  //LOG("Exe " + RTN_Name(Rtn) + "\n");
   if (!RTN_Valid(Rtn)) { // some library instructions do not have rtn !?
-    //LOG("Invalid RTN " + INS_Disassemble(ins) + "\n");
     return false;
   }
 
   SEC Sec = RTN_Sec(Rtn);
   if(!SEC_Valid(Sec)) {
-    //LOG("Invalid SEC " + INS_Disassemble(ins) + "\n");
     return false;
   }
 
   IMG Img = SEC_Img(Sec);
   if(!IMG_Valid(Img)) {
-    //LOG("Invalid IMG " + INS_Disassemble(ins) + "\n");
     return false;
   }
+
   if (!IMG_IsMainExecutable(Img)) {
-    //LOG("Libraries " + IMG_Name(Img) + "\n");
-    return false;
+    std::string libname = IMG_Name(Img).substr(IMG_Name(Img).find_last_of("\\/")+1);
+    libname = libname.substr(0, libname.find_last_of("."));
+    //LOG("Libraries " + libname + "\n");
+    if(instrument_libs.Value().find(libname) == std::string::npos){
+      return false;
+    }
   }
 
   // XXX: Look for 'text' in section name. Linux: .text, Mac: __text
@@ -39,8 +46,11 @@ bool isValidInst(INS ins) {
       rtnname.find("__do_global") == 0 || rtnname.find("__stat") == 0) {
     return false;
   }
-  //LOG("Exe " + RTN_Name(Rtn) + "\n");
 
+  return true;
+}
+
+bool isValidInst(INS ins) {
   int FI_Ops = 0;
 #ifdef FI_SRC_REG
   int numR = INS_MaxNumRRegs(ins);
@@ -68,6 +78,10 @@ bool isValidInst(INS ins) {
       //LOG("FIOps = 0!\n");
       return false;
   }
+
+  // Cannot inject after these instructions
+  if(INSx_MayChangeControlFlow(ins))
+      return false;
 
   return true;
 }

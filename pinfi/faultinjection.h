@@ -27,6 +27,7 @@ using namespace std;
 std::fstream fi_output_fstream;
 
 // Reproduce FI variables
+static UINT64 fi_instr_index = 0;
 static UINT64 fi_index = 0;
 static UINT32 fi_bit_flip = 0;
 static UINT32 fi_op = 0;
@@ -35,6 +36,5 @@ static enum {
     DO_RANDOM,
     DO_REPRODUCE,
 } action;
-
 
 #endif

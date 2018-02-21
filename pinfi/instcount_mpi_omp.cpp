@@ -44,6 +44,7 @@ VOID CountInst(TRACE trace, VOID *v)
       if(isValidInst(ins)) {
         static_count++;
 
+        // TODO: thread-safe
         instrument_ofstream << "addr=" << hexstr(INS_Address(ins)) << ", instr=\"" << INS_Disassemble(ins) << "\"" << std::endl;
 
 	/*INS_InsertPredicatedCall(
