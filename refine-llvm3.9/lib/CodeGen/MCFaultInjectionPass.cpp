@@ -290,7 +290,7 @@ namespace {
         bool isData = false, isControl = false, isFrame = false;
         MachineInstr &MI = *Iter;
 
-        if(!MI.isPseudo()) {
+        if(!MI.isPseudo() && !MI.usesCustomInsertionHook()) {
           InstrCount++;
           /*dbgs() << "COUNT ";
             MI.dump(); */
