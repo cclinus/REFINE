@@ -14,7 +14,7 @@
 
 // XXX: instr_iterator is global, *NOT* per thread, static instrumentation
 static UINT64 instr_iterator = 0;
-static _Atomic UINT64 fi_iterator = 0;
+static UINT64 fi_iterator = 0;
 static bool detach = false;
 
 VOID injectReg(VOID *ip, UINT64 idx, UINT32 op, REG reg, PIN_REGISTER *val)
@@ -22,8 +22,8 @@ VOID injectReg(VOID *ip, UINT64 idx, UINT32 op, REG reg, PIN_REGISTER *val)
     if(detach)
         return;
 
-    UINT64 fi_iterator_local = atomic_fetch_add(&fi_iterator, 1);
-    fi_iterator_local++;
+    UINT64 fi_iterator_local = __atomic_add_fetch(&fi_iterator, 1, __ATOMIC_SEQ_CST);
+    //fi_iterator_local++;
 
     if ( fi_iterator_local < fi_index )
         return;
@@ -281,15 +281,15 @@ VOID Init()
         cerr << "REPRODUCE FI" << endl;
         assert(false && "Reproducing experiments is work-in-progress for parallel programs\n");
 
-        int ret = fscanf(fp, "fi_index=%llu, fi_instr_index=%llu, op=%u, reg=%*[a-z0-9], bitflip=%u, addr=%*x\n", &fi_index, &fi_instr_index, &fi_op, &fi_bit_flip);
-        fprintf(stderr, "fi_index=%llu, fi_instr_index=%llu, op=%u, bitflip=%u\n", fi_index, fi_instr_index, fi_op, fi_bit_flip);
+        int ret = fscanf(fp, "fi_index=%"PRIu64", fi_instr_index=%"PRIu64", op=%u, reg=%*[a-z0-9], bitflip=%u, addr=%*x\n", &fi_index, &fi_instr_index, &fi_op, &fi_bit_flip);
+        fprintf(stderr, "fi_index=%"PRIu64", fi_instr_index=%"PRIu64", op=%u, bitflip=%u\n", fi_index, fi_instr_index, fi_op, fi_bit_flip);
         assert(ret == 4 && "fscanf failed!\n");
         action = DO_REPRODUCE;
         assert(fi_index > 0 && "fi_index <= 0!\n");
         assert(fi_instr_index > 0 && "fi_instr_index <= 0!\n");
     }
     else if( (fp = fopen(target_file.Value().c_str(), "r") ) != NULL) {
-        int ret = fscanf(fp, "fi_index=%llu\n", &fi_index);
+        int ret = fscanf(fp, "fi_index=%"PRIu64"\n", &fi_index);
         cerr << "TARGET fi_index=" << fi_index <<" RANDOM INJECTION" << endl;
         assert(ret == 1 && "fscanf failed!\n");
         action = DO_RANDOM;

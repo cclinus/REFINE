@@ -43,7 +43,8 @@ bool isValidTrace(TRACE trace) {
   std::string rtnname = RTN_Name(Rtn);
   if (rtnname.find("__libc") == 0 || rtnname.find("_start") == 0 ||
       rtnname.find("call_gmon_start") == 0 || rtnname.find("frame_dummy") == 0 ||
-      rtnname.find("__do_global") == 0 || rtnname.find("__stat") == 0) {
+      rtnname.find("__do_global") == 0 || rtnname.find("__stat") == 0 || 
+      rtnname.find("register_tm_clones") == 0 || rtnname.find("deregister_tm_clones") == 0) {
     return false;
   }
 

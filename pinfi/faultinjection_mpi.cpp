@@ -278,8 +278,8 @@ VOID get_instance_number()
     if( ( fp = fopen(injection_file.Value().c_str(), "r") ) != NULL) {
         cerr << "REPRODUCE FI" << endl;
 
-        int ret = fscanf(fp, "rank=%d, fi_index=%llu, fi_instr_index=%llu, op=%u, reg=%*[a-z0-9], bitflip=%u, addr=%*x\n", &fi_rank, &fi_index, &fi_instr_index, &fi_op, &fi_bit_flip);
-        fprintf(stderr, "rank=%d, fi_index=%llu, fi_instr_index=%llu, op=%u, bitflip=%u\n", fi_rank, fi_index, fi_instr_index, fi_op, fi_bit_flip);
+        int ret = fscanf(fp, "rank=%d, fi_index=%"PRIu64", fi_instr_index=%"PRIu64", op=%u, reg=%*[a-z0-9], bitflip=%u, addr=%*x\n", &fi_rank, &fi_index, &fi_instr_index, &fi_op, &fi_bit_flip);
+        fprintf(stderr, "rank=%d, fi_index=%"PRIu64", fi_instr_index=%"PRIu64", op=%u, bitflip=%u\n", fi_rank, fi_index, fi_instr_index, fi_op, fi_bit_flip);
         assert(ret == 5 && "fscanf failed!\n");
         action = DO_REPRODUCE;
         assert(rank >= 0 && "rank < 0!\n");
@@ -288,7 +288,7 @@ VOID get_instance_number()
         //assert(false && "early abort");
     }
     else if( (fp = fopen(target_file.Value().c_str(), "r") ) != NULL) {
-        int ret = fscanf(fp, "rank=%d, fi_index=%llu\n", &fi_rank, &fi_index);
+        int ret = fscanf(fp, "rank=%d, fi_index=%"PRIu64"\n", &fi_rank, &fi_index);
         assert(ret == 2 && "fscanf failed!\n");
         cerr << "TARGET rank=" << fi_rank << ", fi_index=" << fi_index <<" RANDOM INJECTION" << endl;
         action = DO_RANDOM;

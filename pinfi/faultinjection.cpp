@@ -280,15 +280,15 @@ VOID Init()
         cerr << "REPRODUCE FI" << endl;
         assert(false && "Reproducing experiments is work-in-progress for parallel programs\n");
 
-        int ret = fscanf(fp, "fi_index=%llu, fi_instr_index=%llu, op=%u, reg=%*[a-z0-9], bitflip=%u, addr=%*x\n", &fi_index, &fi_instr_index, &fi_op, &fi_bit_flip);
-        fprintf(stderr, "fi_index=%llu, fi_instr_index=%llu, op=%u, bitflip=%u\n", fi_index, fi_instr_index, fi_op, fi_bit_flip);
+        int ret = fscanf(fp, "fi_index=%"PRIu64", fi_instr_index=%"PRIu64", op=%u, reg=%*[a-z0-9], bitflip=%u, addr=%*x\n", &fi_index, &fi_instr_index, &fi_op, &fi_bit_flip);
+        fprintf(stderr, "fi_index=%"PRIu64", fi_instr_index=%"PRIu64", op=%u, bitflip=%u\n", fi_index, fi_instr_index, fi_op, fi_bit_flip);
         assert(ret == 4 && "fscanf failed!\n");
         action = DO_REPRODUCE;
         assert(fi_index > 0 && "fi_index <= 0!\n");
         assert(fi_instr_index > 0 && "fi_instr_index <= 0!\n");
     }
     else if( (fp = fopen(target_file.Value().c_str(), "r") ) != NULL) {
-        int ret = fscanf(fp, "fi_index=%llu\n", &fi_index);
+        int ret = fscanf(fp, "fi_index=%"PRIu64"\n", &fi_index);
         cerr << "TARGET fi_index=" << fi_index <<" RANDOM INJECTION" << endl;
         assert(ret == 1 && "fscanf failed!\n");
         action = DO_RANDOM;

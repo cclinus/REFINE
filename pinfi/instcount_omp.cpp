@@ -6,6 +6,7 @@
 #include <string>
 
 #include <assert.h>
+//#include <atomic>
 
 #include "pin.H"
 #include "utils.h"
@@ -20,13 +21,15 @@ KNOB<bool> save_instr(KNOB_MODE_WRITEONCE, "pintool",
 KNOB<string> instrument_file(KNOB_MODE_WRITEONCE, "pintool",
     "instr-file", "pin.instrument.txt", "shows details of the instruction instrumentation");
 
-static _Atomic UINT64 fi_iterator = 0;
+//std::atomic<UINT64> fi_iterator = 0;
+UINT64 fi_iterator = 0;
 
 std::fstream instrument_ofstream;
 
 VOID countInst(UINT32 c)
 {
-  fi_iterator += c;
+  //fi_iterator += c;
+  __atomic_add_fetch(&fi_iterator, c, __ATOMIC_SEQ_CST);
 }
 
 // Pin calls this function every time a new instruction is encountered
