@@ -27,8 +27,8 @@ bool isValidTrace(TRACE trace) {
 
   if (!IMG_IsMainExecutable(Img)) {
     std::string libname = IMG_Name(Img).substr(IMG_Name(Img).find_last_of("\\/")+1);
-    libname = libname.substr(0, libname.find_last_of("."));
-    //LOG("Libraries " + libname + "\n");
+    libname = libname.substr(0, libname.find_first_of("."));
+    //LOG("Libraries " + libname + " vs " + instrument_libs.Value() + "\n");
     if(instrument_libs.Value().find(libname) == std::string::npos){
       return false;
     }
