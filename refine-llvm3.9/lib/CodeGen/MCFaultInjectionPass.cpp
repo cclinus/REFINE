@@ -56,28 +56,28 @@ using namespace llvm;
 #define DEBUG_TYPE "mc-fi"
 
 cl::opt<bool>
-FIEnableOpt("fi", cl::desc("Enable fault injection at the instruction level"), cl::init(false));
+FIEnable("fi", cl::desc("Enable fault injection at the instruction level"), cl::init(false));
 
 cl::opt<bool>
-FILiveinsMBBEnableOpt("fi-mbb-liveins", cl::desc("Enable fault injection at the livein registers of the MBB"), cl::init(false));
+FILiveinsMBBEnable("fi-mbb-liveins", cl::desc("Enable fault injection at the livein registers of the MBB"), cl::init(false));
 
 cl::opt<bool>
-InstrBBEnableOpt("fi-bb", cl::desc("Enable basic block instrumentation for fast-forwarding instruction level FI"), cl::init(false));
+FFEnable("fi-ff", cl::desc("Enable basic block instrumentation and detaching for fast-forwarding instruction level FI"), cl::init(false));
 
 cl::list<std::string>
-FuncsOpt("fi-funcs", cl::CommaSeparated, cl::desc("Fault injected functions"), cl::value_desc("foo1, foo2, foo3, ..."));
+FuncInclList("fi-funcs", cl::CommaSeparated, cl::desc("Fault injected functions"), cl::value_desc("foo1, foo2, foo3, ..."));
 
 cl::list<std::string>
-FuncsExclOpt("fi-funcs-excl", cl::CommaSeparated, cl::desc("Exclude functions from fault injection"), cl::value_desc("foo1, foo2, foo3, ..."));
+FuncExclList("fi-funcs-excl", cl::CommaSeparated, cl::desc("Exclude functions from fault injection"), cl::value_desc("foo1, foo2, foo3, ..."));
 
 cl::list<std::string>
-InstOpt("fi-inst", cl::CommaSeparated, cl::desc("(Architecture specific! Comma-separated list of instructions to target for fault injection"), cl::value_desc("add, sub, mul, ..."));
+FIInstList("fi-inst", cl::CommaSeparated, cl::desc("(Architecture specific! Comma-separated list of instructions to target for fault injection"), cl::value_desc("add, sub, mul, ..."));
 
 cl::list<std::string>
-InstTypesOpt("fi-inst-types", cl::CommaSeparated, cl::desc("Fault injected instruction types"), cl::value_desc("data,control,frame"));
+FIInstTypes("fi-inst-types", cl::CommaSeparated, cl::desc("Fault injected instruction types"), cl::value_desc("data,control,frame"));
 
 cl::list<std::string>
-FIRegsOpt("fi-reg-types", cl::CommaSeparated, cl::desc("Fault injected registers"), cl::value_desc("dst, src"));
+FIRegTypes("fi-reg-types", cl::CommaSeparated, cl::desc("Fault injected registers"), cl::value_desc("dst, src"));
 
 namespace {
   struct MCFaultInjectionPass : public MachineFunctionPass {
@@ -89,19 +89,12 @@ namespace {
 
     int TotalInstrCount;
     int TotalTargetInstrCount;
-    bool FIEnable;
-    bool FILiveinsMBBEnable;
-    bool InstrBBEnable;
 
     Module *M;
   public:
     static char ID;
 
     MCFaultInjectionPass() : MachineFunctionPass(ID) {
-      FIEnable = FIEnableOpt;
-      FILiveinsMBBEnable = FILiveinsMBBEnableOpt;
-      InstrBBEnable = InstrBBEnableOpt;
-
       TotalInstrCount = 0; TotalTargetInstrCount = 0;
     }
 
@@ -379,16 +372,16 @@ namespace {
       if(!FIEnable && !FILiveinsMBBEnable)
         return false;
 
-      if(!FuncsOpt.empty())
-        if(std::find(FuncsOpt.begin(), FuncsOpt.end(), "*") == FuncsOpt.end())
-          if(std::find(FuncsOpt.begin(), FuncsOpt.end(), MF.getName()) == FuncsOpt.end()) {
+      if(!FuncInclList.empty())
+        if(std::find(FuncInclList.begin(), FuncInclList.end(), "*") == FuncInclList.end())
+          if(std::find(FuncInclList.begin(), FuncInclList.end(), MF.getName()) == FuncInclList.end()) {
             dbgs() << "Skip:" << MF.getName() << "\n";
             return false;
           }
 
-      if(!FuncsExclOpt.empty()) {
-        if(std::find(FuncsExclOpt.begin(), FuncsExclOpt.end(), "*") == FuncsExclOpt.end()) {
-          if(std::find(FuncsExclOpt.begin(), FuncsExclOpt.end(), MF.getName()) != FuncsExclOpt.end()) {
+      if(!FuncExclList.empty()) {
+        if(std::find(FuncExclList.begin(), FuncExclList.end(), "*") == FuncExclList.end()) {
+          if(std::find(FuncExclList.begin(), FuncExclList.end(), MF.getName()) != FuncExclList.end()) {
             dbgs() << "Skip (EXCL):" << MF.getName() << "\n";
             return false;
           }
@@ -407,18 +400,18 @@ namespace {
         // TODO: Think whether error checking should be better, i.e., an invalid option at the
         // moment is ignored, perhaps reporting back an error is better
         bool doDataFI = false, doControlFI = false, doFrameFI = false;
-        if(!InstTypesOpt.empty()) {
+        if(!FIInstTypes.empty()) {
 
-          if(std::find(InstTypesOpt.begin(), InstTypesOpt.end(), "*") != InstTypesOpt.end())
+          if(std::find(FIInstTypes.begin(), FIInstTypes.end(), "*") != FIInstTypes.end())
             doDataFI = doControlFI = doFrameFI = true;
           else {
-            if(std::find(InstTypesOpt.begin(), InstTypesOpt.end(), "data") != InstTypesOpt.end())
+            if(std::find(FIInstTypes.begin(), FIInstTypes.end(), "data") != FIInstTypes.end())
               doDataFI = true;
 
-            if(std::find(InstTypesOpt.begin(), InstTypesOpt.end(), "control") != InstTypesOpt.end())
+            if(std::find(FIInstTypes.begin(), FIInstTypes.end(), "control") != FIInstTypes.end())
               doControlFI = true;
 
-            if(std::find(InstTypesOpt.begin(), InstTypesOpt.end(), "frame") != InstTypesOpt.end())
+            if(std::find(FIInstTypes.begin(), FIInstTypes.end(), "frame") != FIInstTypes.end())
               doFrameFI = true;
           }
 
@@ -426,17 +419,17 @@ namespace {
         }
 
         bool injectDstRegs = false, injectSrcRegs = false;
-        if(!InstTypesOpt.empty()) {
-          if(std::find(FIRegsOpt.begin(), FIRegsOpt.end(), "dst") != FIRegsOpt.end())
+        if(!FIInstTypes.empty()) {
+          if(std::find(FIRegTypes.begin(), FIRegTypes.end(), "dst") != FIRegTypes.end())
             injectDstRegs = true;
 
-          if(std::find(FIRegsOpt.begin(), FIRegsOpt.end(), "src") != FIRegsOpt.end())
+          if(std::find(FIRegTypes.begin(), FIRegTypes.end(), "src") != FIRegTypes.end())
             injectSrcRegs = true;
 
           assert((injectDstRegs || injectSrcRegs) && "FI register types is invalid!");
         }
 
-        if(InstrBBEnable) {
+        if(FFEnable) {
           //dbgs() << "Fast-forwarding enabled\n";
           const TargetFaultInjection *TFI = MF.getSubtarget().getTargetFaultInjection();
           const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
