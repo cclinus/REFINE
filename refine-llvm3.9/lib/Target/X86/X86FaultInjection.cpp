@@ -5,6 +5,7 @@
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineModuleInfo.h"
 #include "X86InstrBuilder.h"
 
 using namespace llvm;
@@ -23,6 +24,7 @@ void X86FaultInjection::injectMachineBasicBlock(
     MachineFunction &MF = *SelMBB.getParent();
     const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
     X86MachineFunctionInfo *X86MFI = MF.getInfo<X86MachineFunctionInfo>();
+    const X86Subtarget &Subtarget = MF.getSubtarget<X86Subtarget>();
 
     /* ============================================================= CREATE SelMBB ========================================================== */
 
@@ -71,7 +73,12 @@ void X86FaultInjection::injectMachineBasicBlock(
         addRegOffset(BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, -24);
         // MOV RDI <= RSP, selMBB arg1
         addRegOffset(BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RDI), X86::RSP, false, 0);
-        BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::CALL64pcrel32)).addExternalSymbol("selMBB", X86II::MO_PLT);
+
+        // XXX: Create the external symbol and get target flags (e.g, X86II::MO_PLT) for linking
+        MachineOperand MO = MachineOperand::CreateES("selMBB");
+        MO.setTargetFlags( Subtarget.classifyGlobalFunctionReference( nullptr, *MF.getMMI().getModule() ) );
+        BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::CALL64pcrel32)).addOperand( MO );
+
         // TEST for jump (see code later), XXX: THIS SETS FLAGS FOR THE JMP, be careful not to mess with them until the branch
         addDirectMem(BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::TEST8mi)), X86::RDI).addImm(0x2);
         // XXX: JmpDetachMBB and JmpFIMBB cleanup stack allocation for calling selMBB
@@ -265,7 +272,11 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
         addRegOffset(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::MOV8mi)), X86::RSI, false, i*sizeof(char)).addImm(0);
 #endif
 
-        BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::CALL64pcrel32)).addExternalSymbol("selInst", X86II::MO_PLT);
+        // XXX: Create the external symbol and get target flags (e.g, X86II::MO_PLT) for linking
+        MachineOperand MO = MachineOperand::CreateES("selInst");
+        MO.setTargetFlags( Subtarget.classifyGlobalFunctionReference( nullptr, *MF.getMMI().getModule() ) );
+        BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::CALL64pcrel32)).addOperand( MO );
+
         // TEST for jump (see code later), XXX: THIS SETS FLAGS FOR THE JMP, be careful not to mess with them until the branch
         addDirectMem(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::TEST8mi)), X86::RDI).addImm(0x1);
 
@@ -332,7 +343,11 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
     }
 
     //addDirectMem(BuildMI(PreFIMBB, PreFIMBB.end(), DebugLoc(), TII.get(X86::MOV64mi32)), X86::RDI).addImm(0x0);
-    BuildMI(PreFIMBB, PreFIMBB.end(), DebugLoc(), TII.get(X86::CALL64pcrel32)).addExternalSymbol("doInject", X86II::MO_PLT);
+
+    // XXX: Create the external symbol and get target flags (e.g, X86II::MO_PLT) for linking
+    MachineOperand MO = MachineOperand::CreateES("doInject");
+    MO.setTargetFlags( Subtarget.classifyGlobalFunctionReference( nullptr, *MF.getMMI().getModule() ) );
+    BuildMI(PreFIMBB, PreFIMBB.end(), DebugLoc(), TII.get(X86::CALL64pcrel32)).addOperand( MO );
 
     // POP doInject arg2, arg3, ar4
     addRegOffset(BuildMI(PreFIMBB, PreFIMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, AlignedStackSpace);
