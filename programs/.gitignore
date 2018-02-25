@@ -16,7 +16,7 @@ pin*txt
 
 # AMG2013
 *amg2013
-*sstruct.in.MG.FD 
+*sstruct.in.MG.FD
 
 # NAS specific
 *npbparams.h
@@ -28,7 +28,6 @@ pin-fi/CoMD/bin/CoMD-serial
 CoMD*yaml
 CoMD_info.h
 CoMD_serial
-pots
 
 # HPCCG specific
 hpccg*yaml
