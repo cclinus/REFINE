@@ -14,26 +14,39 @@ llfi*txt
 # PIN
 pin*txt
 
+# REFINE
+*refine*txt
+
 # AMG2013
 *amg2013
 *sstruct.in.MG.FD
 
 # NAS specific
 *npbparams.h
-*/NPB3.3-SER-C/sys/setparams
-*/NPB3.3-SER-C/bin/*.x
+*/*/NPB3.3-SER-C/sys/setparams
+*/*/NPB3.3-SER-C/bin
+#*
 
 # CoMD specific
-pin-fi/CoMD/bin/CoMD-serial
+*/*/CoMD/bin/*
 CoMD*yaml
 CoMD_info.h
 CoMD_serial
 
 # HPCCG specific
+test_HPCCG
 hpccg*yaml
 
 # LULESH
 lulesh2.0
+
+# miniFE
+miniFE.x
+miniFE*yaml
+miniFE_info.hpp
+
+# XSBench
+*/src/XSBench
 
 # gedit backup files
 *~
