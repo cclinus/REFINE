@@ -10,6 +10,11 @@
 
 using namespace llvm;
 
+/* TODO: 
+ * 1. Create emilt functions to avoid code replication
+ * 2. Do liveness analysis to reducing stack spilling/filling, check X86InstrInfo.cpp:4662
+ */
+
 // XXX: slowdown for storing string
 //#define INSTR_PRINT
 
