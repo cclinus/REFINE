@@ -18,8 +18,7 @@ pin*txt
 *refine*txt
 
 # AMG2013
-*test/amg2013
-*sstruct.in.MG.FD
+*/*/AMG2013/test/amg2013
 
 # NAS specific
 *npbparams.h
