@@ -24,10 +24,10 @@ OBJECTS2.0 = $(SOURCES2.0:.cc=.o)
 
 #Default build suggestions with OpenMP for g++
 #CXXFLAGS = -g -O3 -fopenmp -I. -Wall
-CXXFLAGS = -g -O3 -I. -Wall -mllvm -fi -mllvm -fi-funcs="*" -mllvm -fi-inst-types=frame,control,data -mllvm -fi-reg-types=dst
+CXXFLAGS = -g -O3 -I. -Wall -mllvm -fi -mllvm -fi-funcs="*" -mllvm -fi-inst-types="*" -mllvm -fi-reg-types=dst
 #CXXFLAGS = -g -O3 -I. -Wall
 #LDFLAGS = -g -O3 -fopenmp
-LDFLAGS = -g -O3
+LDFLAGS = -g -O3 -linject_ser_noff
 
 #Below are reasonable default flags for a serial build
 #CXXFLAGS = -g -O3 -I. -Wall
@@ -53,12 +53,9 @@ LDFLAGS = -g -O3
 
 all: $(LULESH_EXEC)
 
-lulesh2.0: $(OBJECTS2.0) doInject.o
+lulesh2.0: $(OBJECTS2.0)
 	@echo "Linking"
-	$(CXX) $(OBJECTS2.0) doInject.o $(LDFLAGS) -lm -o $@
-
-doInject.o: $(HOME)/projects/llnl/llvm-fi/injectlib/doInject.c
-	$(CC) -O3 -c $<
+	$(CXX) $(OBJECTS2.0) $(LDFLAGS) -lm -o $@
 
 clean:
 	/bin/rm -f *.o *~ $(OBJECTS) $(LULESH_EXEC)

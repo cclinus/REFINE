@@ -41,6 +41,7 @@ LFLAGS =\
  -L../struct_mv\
  -L../krylov\
  -L../utilities\
+ -L$(HOME)/usr/local/lib\
  -lparcsr_ls\
  -lparcsr_mv\
  -lseq_mv\
@@ -49,6 +50,7 @@ LFLAGS =\
  -lHYPRE_struct_mv\
  -lkrylov\
  -lHYPRE_utilities\
+ -linject_ser_noff\
  ${INCLUDE_LFLAGS}
 
 ##################################################################
@@ -67,18 +69,15 @@ veryclean: clean
 # Rules
 ##################################################################
                                                                                                                                          
-amg2013: doInject.o amg2013.o 
+amg2013: amg2013.o 
 	@echo  "Linking" $@ "... "
-	${CC} -o amg2013 amg2013.o doInject.o ${LFLAGS}
+	${CC} -o amg2013 amg2013.o ${LFLAGS}
                                                                                                                         
                  
 ##################################################################
 # Generic rules
 ##################################################################
                                                                                                                                          
-doInject.o: $(HOME)/projects/llnl/llvm-fi/injectlib/doInject.c
-	${CC} -c -O3 $< -o $@
-
 .c.o:
 	${CC} -o $@ -c ${CFLAGS} $<
                                                                

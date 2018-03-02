@@ -96,7 +96,7 @@ USE_OMP =
 #
 # 7) System libraries: (May need to add -lg2c before -lm)
 
-SYS_LIB =-lm
+SYS_LIB =-lm -linject_ser_noff
 
 #
 # 6) Specify name if executable (optional):
@@ -117,11 +117,8 @@ TEST_CPP = main.cpp generate_matrix.cpp read_HPC_row.cpp \
 
 TEST_OBJ          = $(TEST_CPP:.cpp=.o)
 
-$(TARGET): $(TEST_OBJ) doInject.o
-	$(LINKER) $(CPP_OPT_FLAGS) $(OMP_FLAGS) $(TEST_OBJ) doInject.o $(LIB_PATHS) -o $(TARGET)
-
-doInject.o: $(HOME)/projects/llnl/llvm-fi/injectlib/doInject.c
-	$(CC) -O3 -c $< -o $@
+$(TARGET): $(TEST_OBJ)
+	$(LINKER) $(CPP_OPT_FLAGS) $(OMP_FLAGS) $(TEST_OBJ) $(LIB_PATHS) -o $(TARGET)
 
 test:
 	@echo "Not implemented yet..."

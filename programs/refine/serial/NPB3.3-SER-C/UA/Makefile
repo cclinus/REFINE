@@ -8,7 +8,7 @@ include ../sys/make.common
 
 OBJS = ua.o convect.o diffuse.o adapt.o move.o mason.o \
        precond.o utils.o transfer.o verify.o  setup.o\
-       ${COMMON}/print_results.o ${COMMON}/c_timers.o ${COMMON}/wtime.o ${COMMON}/doInject.o
+       ${COMMON}/print_results.o ${COMMON}/c_timers.o ${COMMON}/wtime.o
 
 
 # npbparams.h is included by header.h

@@ -16,12 +16,12 @@ DO_MPI = OFF
 ### own.  If you need any -L or -l switches to get C standard libraries
 ### (such as -lm for the math library) put them in C_LIB.
 CC = $(HOME)/usr/local/bin/clang
-CFLAGS = -std=c99 -mllvm -fi -mllvm -fi-funcs="*" -mllvm -fi-inst-types=frame,control,data -mllvm -fi-reg-types=dst
+CFLAGS = -std=c99 -mllvm -fi -mllvm -fi-funcs="*" -mllvm -fi-inst-types="*" -mllvm -fi-reg-types=dst
 #-S
 #CFLAGS = -std=c99 -S
 OPTFLAGS = -g -O3
 INCLUDES = 
-C_LIB = -lm
+C_LIB = -lm -linject_ser_noff
 
 
 ### If you need to specify include paths, library paths, or link flags
@@ -76,16 +76,13 @@ SOURCES=$(wildcard *.c)
 OBJECTS=$(SOURCES:.c=.o)
 
 
-DEFAULT: doInject.o ${CoMD_EXE}
-
-doInject.o: $(HOME)/projects/llnl/llvm-fi/injectlib/doInject.c
-	${CC} -c -O3 $< -o $@
+DEFAULT: ${CoMD_EXE}
 
 %.o: %.c
 	${CC} ${CFLAGS} -c $< -o $@
 
 ${CoMD_EXE}: ${BIN_DIR} CoMD_info.h ${OBJECTS} 
-	${CC} ${CFLAGS} -o ${CoMD_EXE} ${OBJECTS} doInject.o ${LDFLAGS}
+	${CC} ${CFLAGS} -o ${CoMD_EXE} ${OBJECTS} ${LDFLAGS}
 
 CoMD_info.h: Makefile
 	./generate_info_header ${CoMD_VARIANT} "$(CC)" "$(CFLAGS)" "$(LDFLAGS)"

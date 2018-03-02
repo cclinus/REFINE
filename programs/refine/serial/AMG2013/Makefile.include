@@ -13,7 +13,8 @@
 
 # set the compiler here
 #CC = mpicc
-CC = mpicc -cc=$(HOME)/usr/local/bin/clang
+CC = mpicc
+#CC = $(HOME)/usr/local/bin/clang
 
 # set compile flags here
 # MPI only:
@@ -34,6 +35,6 @@ INCLUDE_CFLAGS = -O2 -DHYPRE_LONG_LONG -DHYPRE_NO_GLOBAL_PARTITION $(FI_CFLAGS)
 # set link flags here
 #INCLUDE_LFLAGS = -lm -openmp -qsmp
 #INCLUDE_LFLAGS = -lm  -fopenmp
-INCLUDE_LFLAGS = -lm
+INCLUDE_LFLAGS = -lm -linject_ser_noff
 #-L$(HOME)/usr/local/lib  -lmpi
 

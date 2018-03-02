@@ -13,7 +13,7 @@
 
 # set the compiler here
 #CC = mpicc
-CC = mpicc -cc=$(HOME)/usr/local/bin/clang
+CC = $(HOME)/usr/local/bin/clang
 
 # set compile flags here
 # MPI only:
@@ -28,7 +28,7 @@ CC = mpicc -cc=$(HOME)/usr/local/bin/clang
 #INCLUDE_CFLAGS = -O2 -DTIMER_USE_MPI -DHYPRE_USING_OPENMP -DHYPRE_LONG_LONG -DHYPRE_NO_GLOBAL_PARTITION -fopenmp
 #INCLUDE_CFLAGS = -O2 -DHYPRE_SEQUENTIAL -DHYPRE_LONG_LONG -DHYPRE_NO_GLOBAL_PARTITION  -I$(HOME)/usr/local/include
 #INCLUDE_CFLAGS = -O2 -DHYPRE_LONG_LONG -DHYPRE_NO_GLOBAL_PARTITION  -I$(HOME)/usr/local/include
-INCLUDE_CFLAGS = -O2 -DHYPRE_LONG_LONG -DHYPRE_NO_GLOBAL_PARTITION  -I$(HOME)/usr/local/include
+INCLUDE_CFLAGS = -O2 -DHYPRE_LONG_LONG -DHYPRE_NO_GLOBAL_PARTITION
 
 # set link flags here
 #INCLUDE_LFLAGS = -lm -openmp -qsmp
