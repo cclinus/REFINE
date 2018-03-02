@@ -16,9 +16,9 @@ assert args.execmode in ['serial', 'omp', 'mpi', 'mpi+omp'], 'Valid execmodes ar
 if args.execmode == 'serial':
     print('serial')
     with open('refine-inscount.txt','r') as f:
-        m = re.match('\d+', f.read())
+        m = re.match('fi_index=(\d+)', f.read())
 
-    num_insts = int(m[0])
+    num_insts = int(m.group(1))
     print('num_insts %d'%num_insts)
     # +1 because it returns stop-1
     target = random.randrange(1, num_insts+1)
@@ -31,7 +31,7 @@ if args.execmode == 'serial':
 elif args.execmode == 'omp':
     print('omp')
     with open('refine-inscount.txt','r') as f:
-        m = re.findall('thread=(\d+), targets=(\d+)', f.read())
+        m = re.findall('thread=(\d+), fi_index=(\d+)', f.read())
         thread_insts = [ ( int(x), int(y) ) for (x,y) in m ]
 
     num_insts = sum(j for __,j in thread_insts)
@@ -94,7 +94,7 @@ elif args.execmode == 'mpi+omp':
     rank = 0
     for rank in range(0, len( files ) ):
         with open('%d.refine-inscount.txt'%(rank),'r') as f:
-                m = re.findall('thread=(\d+), targets=(\d+)', f.read())
+                m = re.findall('thread=(\d+), fi_index=(\d+)', f.read())
                 thread_insts = [ ( int(x), int(y) ) for (x,y) in m ]
                 rank_insts.append( ( rank, thread_insts ) )
 
