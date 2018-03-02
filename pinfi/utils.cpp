@@ -4,6 +4,9 @@
 KNOB<string> instrument_libs(KNOB_MODE_WRITEONCE, "pintool",
     "instr-libs", "", "comma-separated list of libraries for instruction instrumentation");
 
+KNOB<bool> instrument_nomain(KNOB_MODE_WRITEONCE, "pintool",
+    "nomain", "0", "disable the instrumentation of the main executiable");
+
 bool isValidTrace(TRACE trace) {
   /**
    * IMPORTANT: This is to make sure fault injections are done at the .text 
@@ -24,6 +27,9 @@ bool isValidTrace(TRACE trace) {
   if(!IMG_Valid(Img)) {
     return false;
   }
+
+  if(instrument_nomain && IMG_IsMainExecutable(Img))
+    return false;
 
   if (!IMG_IsMainExecutable(Img)) {
     std::string libname = IMG_Name(Img).substr(IMG_Name(Img).find_last_of("\\/")+1);
