@@ -66,7 +66,7 @@ USE_MPI =
 #IA32 with GCC: 
 #CPP_OPT_FLAGS = -O3 -funroll-all-loops -malign-double
 #CPP_OPT_FLAGS = -O3 -ftree-vectorize -ftree-vectorizer-verbose=2
-CPP_OPT_FLAGS = -O3 -ftree-vectorize -Rpass=loop-vectorize -mllvm -fi -mllvm -fi-funcs="*" -mllvm -fi-inst-types=frame,control,data -mllvm -fi-reg-types=dst
+CPP_OPT_FLAGS = -O3 -ftree-vectorize -Rpass=loop-vectorize -mllvm -fi -mllvm -fi-funcs="*" -mllvm -fi-inst-types="*" -mllvm -fi-reg-types=dst -mllvm -fi-ff
 
 #
 # 4) MPI library:
@@ -96,7 +96,7 @@ USE_OMP =
 #
 # 7) System libraries: (May need to add -lg2c before -lm)
 
-SYS_LIB =-lm -linject_ser_noff
+SYS_LIB =-lm -linject_ser
 
 #
 # 6) Specify name if executable (optional):

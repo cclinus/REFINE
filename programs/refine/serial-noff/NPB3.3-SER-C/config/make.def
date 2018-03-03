@@ -90,7 +90,7 @@ CLINK	= $(CC)
 #---------------------------------------------------------------------------
 # These macros are passed to the linker 
 #---------------------------------------------------------------------------
-C_LIB  = -lm -linject_ser
+C_LIB  = -lm -linject_ser_noff
 
 #---------------------------------------------------------------------------
 # These macros are passed to the compiler 
@@ -112,7 +112,7 @@ C_INC = -I../common
 # _LARGEFILE64_SOURCE - are standard compiler flags which allow to work with 
 # files larger than 2GB.
 #---------------------------------------------------------------------------
-CFLAGS	= -g -Wall -O3 -mllvm -fi -mllvm -fi-funcs="*" -mllvm -fi-inst-types="*" -mllvm -fi-reg-types=dst -mllvm -fi-ff
+CFLAGS	= -g -Wall -O3 -mllvm -fi -mllvm -fi-funcs="*" -mllvm -fi-inst-types="*" -mllvm -fi-reg-types=dst
 #CFLAGS	= -g -Wall -O3 
 
 #---------------------------------------------------------------------------

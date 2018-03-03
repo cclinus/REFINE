@@ -36,10 +36,10 @@ obj = $(source:.c=.o)
 #===============================================================================
 
 # Standard Flags
-CFLAGS := -std=gnu99 -mllvm -fi -mllvm -fi-funcs="*" -mllvm -fi-inst-types="*" -mllvm -fi-reg-types=dst -mllvm -fi-ff
+CFLAGS := -std=gnu99 -mllvm -fi -mllvm -fi-funcs="*" -mllvm -fi-inst-types=frame,control,data -mllvm -fi-reg-types=dst
 
 # Linker Flags
-LDFLAGS = -lm -linject_ser
+LDFLAGS = -lm -linject_ser_noff
 
 # Regular gcc Compiler
 ifeq ($(COMPILER),gnu)
