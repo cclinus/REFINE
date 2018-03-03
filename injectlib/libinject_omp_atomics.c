@@ -6,26 +6,23 @@
 #include <assert.h>
 #include <execinfo.h>
 #include <string.h>
-#include <omp.h>
-#include <pthread.h>
-#include <dlfcn.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include "mt64.h"
+#include <pthread.h>
 
 // TODO: preserve_all is too paranoid, should save at caller site needed registers
 void selInst(uint64_t *, uint8_t *) __attribute__((preserve_all));
-void selMBB(uint64_t *, uint64_t) __attribute__((preserve_most));
+void selMBB(uint64_t *, uint64_t) __attribute__((preserve_all));
 void doInject(unsigned , uint64_t *, uint64_t *, uint8_t *) __attribute__((preserve_all));
 void init() __attribute__((constructor));
 void fini() __attribute__((destructor));
 
-
-// per-thread variables
-#define MAX_THREADS 256
-static union { uint64_t v; char pad[64]; } fi_iterator[MAX_THREADS]  __attribute__((aligned(64)))= { { 0 }  };
-__thread int tid = -1;
-atomic_int gtid = 0;
-//_Atomic uint64_t fi_iterator_atomic = 0;
+// Atomic iterator
+_Atomic static uint64_t fi_iterator = 0;
+// XXX: assumes only one fault, fi_iterator_local written/read by only one thread
+//static __thread uint64_t fi_iterator_local = 0;
+static uint64_t fi_iterator_local = 0;
 
 // FI
 enum {
@@ -40,12 +37,10 @@ enum {
     REFINE_DETACH=2
 };
 
-int fi_thread = -1;
 uint64_t fi_index = 0;
 uint64_t op_num = 0;
 uint64_t op_size = 0;
 unsigned bit_pos = 0;
-//_Thread_local int tid = -1;
 
 char inscount_fname[64];
 const char *target_fname = "refine-target.txt";
@@ -54,38 +49,44 @@ FILE *ins_fp, *tgt_fp, *inj_fp;
 
 void selMBB(uint64_t *ret, uint64_t num_insts)
 {
-    *ret = REFINE_BB;
-    if(tid < 0) {
-        tid = atomic_fetch_add(&gtid, 1);
-    }
+    /*void *callstack[3];
+    int frames = backtrace(callstack, 2);
+    char **strs = backtrace_symbols(callstack, frames);
+    int i;
+    printf("=== start ===\n");
+    for(i=1; i<frames; i++)
+        printf("%s ", strs[i]);
+    printf("\n=== finish ===\n");
+    free(strs);*/
 
-    if(fi_index > 0){
-        if(fi_thread != tid || fi_index <= fi_iterator[tid].v) {
+
+    // default: count at BB level
+    *ret = REFINE_BB;
+
+    uint64_t fi_iterator_pre = atomic_fetch_add(&fi_iterator, num_insts);
+
+    // fi_index > 0 for fault injection
+    if( fi_index > 0 ) {
+        // Count at Inst level
+        if ( fi_index <= fi_iterator_pre ) {
             *ret = REFINE_DETACH;
-            //printf("DETACH thread %d fi_index %"PRIu64" fi_iterator %"PRIu64"\n", tid, fi_index, fi_iterator[tid].v);
+            //printf("DETACH fi_index %"PRIu64" < fi_iterator_pre %"PRIu64"\n", fi_index, fi_iterator_pre);
         }
-        else if(  ( tid == fi_thread ) && ( fi_iterator[tid].v < fi_index ) && fi_index <= ( fi_iterator[tid].v + num_insts ) ) {
+        else if( ( fi_iterator_pre < fi_index ) && ( fi_index <= ( fi_iterator_pre + num_insts ) ) ) {
             *ret = REFINE_INST;
+            fi_iterator_local = fi_iterator_pre;
+            //printf("INJECT fi_iterator_local %"PRIu64"\n", fi_iterator_local);
         }
-        else {
-            fi_iterator[tid].v += num_insts;
-            //fi_iterator_atomic += num_insts;
-        }
-    }
-    else {
-        fi_iterator[tid].v += num_insts;
-        //fi_iterator_atomic += num_insts;
     }
 }
 
 void selInst(uint64_t *ret, uint8_t *instr_str)
 {
     *ret = 0;
-
-    fi_iterator[tid].v++;
-    if( ( fi_thread == tid ) && (fi_iterator[tid].v == fi_index) ) {
+    fi_iterator_local++;
+    if( fi_iterator_local == fi_index ) {
         *ret = 1;
-        //printf("INJECT thread=%d, fi_index=%"PRIu64", ins=%s\n", tid, fi_iterator[tid].v, instr_str);
+        //printf("INJECT fi_iterator_local=%llu, ins=%s\n", fi_iterator_local, instr_str);
     }
 }
 
@@ -111,8 +112,10 @@ void doInject(unsigned num_ops, uint64_t *op, uint64_t *size, uint8_t *bitmask)
         bit_pos = bitflip;
 
         inj_fp = fopen(inject_fname, "w");
-        fprintf(inj_fp, "thread=%d, fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", \
-                fi_thread, fi_index, op_num, op_size, bit_pos);
+        fprintf(inj_fp, "fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", \
+                fi_index, op_num, op_size, bit_pos);
+        /*fprintf(inj_fp, "fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", \
+                fi_iterator[0], op_num, op_size, bit_pos);*/
         //TODO: for multiple faults, fflush and fclose at fini
         fclose(inj_fp);
     }
@@ -129,9 +132,8 @@ void doInject(unsigned num_ops, uint64_t *op, uint64_t *size, uint8_t *bitmask)
 
     bitmask[bit_i] = (1U << bit_j);
 
-    printf("INJECTING FAULT: thread=%d, fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", \
-            fi_thread, fi_index, op_num, op_size, bitflip);
-    fflush(stdout);
+    printf("INJECTING FAULT: fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", \
+            fi_index, op_num, op_size, bitflip);
 }
 
 void init()
@@ -142,11 +144,11 @@ void init()
         // reproduce injection
         printf("REPRODUCE INJECTION\n");
         assert(0 && "Reproducing experiments is work-in-progress for parallel programs\n");
-        fscanf(inj_fp, "thread=%d, fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", \
-                &fi_thread, &fi_index, &op_num, &op_size, &bit_pos);
-        fprintf(stdout, "thread=%d, fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", \
-                fi_thread, fi_index, op_num, op_size, bit_pos);
-        assert(fi_thread >= 0 && "fi_thread < 0\n");
+        int ret = fscanf(inj_fp, "fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", \
+                &fi_index, &op_num, &op_size, &bit_pos);
+        fprintf(stdout, "fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", \
+                fi_index, op_num, op_size, bit_pos);
+        assert(ret == 4 && "fscanf failed to parse input\n");
         assert(fi_index > 0 && "fi_index <= 0!\n");
         assert(op_num >= 0 && "op_num < 0!\n");
         assert(op_size > 0 && "op_size <=0!\n");
@@ -158,10 +160,11 @@ void init()
     }
     // This is targeted injection, selecting the instruction to run a random experiment
     else if ( ( tgt_fp = fopen(target_fname, "r") ) ) {
-        int ret = fscanf(tgt_fp, "thread=%d, fi_index=%"PRIu64"\n", &fi_thread, &fi_index);
-        assert(ret == 2 && "fscanf failed to parse input\n");
-        assert(fi_thread >= 0 && "fi_thread < 0\n");
+        int ret = fscanf(tgt_fp, "fi_index=%"PRIu64"\n", &fi_index);
+        assert(ret == 1 && "fscanf failed to parse input\n");
         assert(fi_index > 0 && "fi_index <= 0\n");
+
+        printf("TARGET fi_index=%"PRIu64"\n", fi_index);
 
         fclose(tgt_fp);
 
@@ -182,9 +185,6 @@ void init()
         printf("PROFILING RUN\n");
         action = DO_PROFILING;
     }
-
-    /*tid = atomic_fetch_add(&gtid, 1);
-    printf("init ptid %u tid %d gtid %d\n", pthread_self(), tid, gtid);*/
 }
 
 void fini()
@@ -195,18 +195,9 @@ void fini()
         sprintf(inscount_fname, "%s", "refine-inscount.txt");
         ins_fp = fopen(inscount_fname, "w");
         assert(ins_fp != NULL && "Error opening inscount file\n");
-        printf("No threads %d\n", gtid); //ggout
-        uint64_t total_ins = 0;
-        int i;
-        for(i=0; i < gtid; i++) {
-            fprintf(ins_fp, "thread=%d, fi_index=%"PRIu64"\n", i, fi_iterator[i].v);
-            fprintf(stderr, "thread=%d, fi_index=%"PRIu64"\n", i, fi_iterator[i].v);
-            total_ins += fi_iterator[i].v;
-        }
-        //fprintf(stderr, "total: %"PRIu64" -- atomic: %"PRIu64"\n", total_ins, fi_iterator_atomic);
-        fprintf(stderr, "total: %"PRIu64"\n", total_ins);
+        fprintf(ins_fp, "fi_index=%"PRIu64"\n", fi_iterator);
+        fprintf(stderr, "fi_index=%"PRIu64"\n", fi_iterator);
         fclose(ins_fp);
-        printf("v2\n");
     }
 }
 
