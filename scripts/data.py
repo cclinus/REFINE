@@ -1,109 +1,328 @@
 import os
 import sys
 
-try:
-    appsdir = os.environ['APPSDIR']
-except:
-    print('Env variable APPSDIR is missing')
-    sys.exit(1)
-
-INPUT = 'serial'
+#TODO: REMOVE NTHREADS
 NTHREADS = '16'
 
+#Programs
 ## XXX: IS is very short running and it has no output to verify
-Programs
-NAS = {
-    'test':{
-        'BT':{ 'CLASS':'S' }, 'CG':{ 'CLASS':'S' }, 'DC': { 'CLASS':'S' }, 'EP': { 'CLASS':'S' },
-        'FT':{ 'CLASS':'S' }, 'IS':{ 'CLASS':'S' }, 'LU': { 'CLASS':'S' }, 'MG': { 'CLASS':'S' },
-        'SP':{ 'CLASS':'S' }, 'UA':{ 'CLASS':'S' }
-    }
-    'serial':{
-        'BT':{ 'CLASS':'A' }, 'CG':{ 'CLASS':'B' }, 'DC': { 'CLASS':'W' }, 'EP': { 'CLASS':'A' },
-        'FT':{ 'CLASS':'B' }, 'IS':{ 'CLASS':'A' }, 'LU': { 'CLASS':'A' }, 'MG': { 'CLASS':'B' },
-        'SP':{ 'CLASS':'A' }, 'UA':{ 'CLASS':'B' }
-    }
-    'omp':{
-        'BT':{ 'CLASS':'B' }, 'CG':{ 'CLASS':'C' }, 'DC': { 'CLASS':'A' }, 'EP': { 'CLASS':'C' },
-        'FT':{ 'CLASS':'B' }, 'IS':{ 'CLASS':'A' }, 'LU': { 'CLASS':'C' }, 'MG': { 'CLASS':'C' },
-        'SP':{ 'CLASS':'B' }, 'UA':{ 'CLASS':'B' }
+#TODO ADD MG
+apps = [ 'AMG' , 'CoMD', 'HPCCG-1.0', 'lulesh', 'XSBench', 'miniFE', 'BT', 'CG', 'DC', 'EP', 'FT', 'LU', 'SP', 'UA' ]
 
-    }
-}
 
-AMG= {
-    'test'  : ['/AMG/test/amg', '-n', '32', '32', '32'],
-    'serial': ['/AMG/test/amg', '-n', '96', '96', '96'],
-    'omp'   : ['/AMG/test/amg', '-n', '256', '256', '256'],
-},
-
-CoMD = {
-    'test'  : ['/CoMD/bin/CoMD-serial', '-d', './pots/', '-e', '-i', '1', '-j', '1', '-k', '1', '-x', '4', '-y', '4', '-z', '4'],
-    'serial': ['/CoMD/bin/CoMD-serial', '-d', './pots/', '-e', '-i', '1', '-j', '1', '-k', '1', '-x', '32', '-y', '32', '-z', '32'],
-    'omp'   : ['/CoMD/bin/CoMD-openmp', '-d', './pots/', '-e', '-i', '1', '-j', '1', '-k', '1', '-x', '64', '-y', '64', '-z', '64']
-
-}
-
-HPCCG = {
-    'test:' : ['HPCCG-1.0/test_HPCCG', '32', '32', '32'],
-    'serial': ['HPCCG-1.0/test_HPCCG', '128', '128', '128'],
-    'omp'   : ['HPCCG-1.0/test_HPCCG', '256', '256', '256']
-}
-
-lulesh = {
-    'test'  : ['lulesh/lulesh2.0', '-i', '10'],
-    'serial': ['lulesh/lulesh2.0'],
-    'omp'   : ['lulesh/lulesh2.0', '-s', '50'],
-}
-# XXX: XSBench needs the number of threads
-XSBench = {
-    'test'  : ['/XSBench/src/XSBench','-s','small', '-l', '100000'],
-    'serial': ['/XSBench/src/XSBench','-s','small'],
-    'omp'   : ['/XSBench/src/XSBench','-s','large','-t',NTHREADS],
-}
-
-miniFE = {
-    'test'  : ['/miniFE/ref/src/miniFE.x','-nx','16','-ny','16','-nz','16'],
-    'serial': ['/miniFE/ref/src/miniFE.x','-nx','64','-ny','64','-nz','64'],
-    'omp'   : ['/miniFE/ref/src/miniFE.x','-nx','256','-ny','256','-nz','256'],
-}
-
-NASBASEDIR = 'NPB3.3-SER-C/'
+NASBASEDIR_SERIAL = 'NPB3.3-SER-C/'
+NASBASEDIR_OMP= 'NPB3.3-OMP-C/'
 
 dirs = {
-'AMG': { 'appdir':'AMG/test/', 'build':{ 'dir':'AMG/', 'args':[] } },
-'CoMD': { 'appdir':'CoMD/', 'build':{ 'dir':'CoMD'+'/src-mpi/', 'args':[] } },
-'HPCCG-1.0': { 'appdir':'HPCCG-1.0/', 'build':{ 'dir':'HPCCG-1.0/', 'args':[] } },
-'lulesh': { 'appdir':'lulesh/', 'build':{ 'dir':'lulesh/', 'args':[] } },
-'XSBench': { 'appdir':'XSBench/src/', 'build':{ 'dir':'XSBench/src/', 'args':[] } },
-'miniFE': { 'appdir':'miniFE/ref/src/', 'build':{ 'dir':'miniFE/ref/src/', 'args':[] } },
-'BT': { 'appdir':NASBASEDIR+'BT/', 'build':{ 'dir':NASBASEDIR+'BT/', 'args':['BT','CLASS='+NAS[INPUT]['BT']['CLASS']] } },
-'CG': { 'appdir':NASBASEDIR+'CG/', 'build':{ 'dir':NASBASEDIR+'CG/', 'args':['CG','CLASS='+NAS[INPUT]['CG']['CLASS']] } },
-'DC': { 'appdir':NASBASEDIR+'DC/', 'build':{ 'dir':NASBASEDIR+'DC/', 'args':['DC','CLASS='+NAS[INPUT]['DC']['CLASS']] } },
-'EP': { 'appdir':NASBASEDIR+'EP/', 'build':{ 'dir':NASBASEDIR+'EP/', 'args':['EP','CLASS='+NAS[INPUT]['EP']['CLASS']] } },
-'FT': { 'appdir':NASBASEDIR+'FT/', 'build':{ 'dir':NASBASEDIR+'FT/', 'args':['FT','CLASS='+NAS[INPUT]['FT']['CLASS']] } },
-'LU': { 'appdir':NASBASEDIR+'LU/', 'build':{ 'dir':NASBASEDIR+'LU/', 'args':['LU','CLASS='+NAS[INPUT]['LU']['CLASS']] } },
-'MG': { 'appdir':NASBASEDIR+'MG/', 'build':{ 'dir':NASBASEDIR+'MG/', 'args':['MG','CLASS='+NAS[INPUT]['MG']['CLASS']] } },
-'SP': { 'appdir':NASBASEDIR+'SP/', 'build':{ 'dir':NASBASEDIR+'SP/', 'args':['SP','CLASS='+NAS[INPUT]['SP']['CLASS']] } },
-'UA': { 'appdir':NASBASEDIR+'UA/', 'build':{ 'dir':NASBASEDIR+'UA/', 'args':['UA','CLASS='+NAS[INPUT]['UA']['CLASS']] } },
+    'serial' : {
+        'AMG': { 'rundir':'AMG/test/', 'build':{ 'dir':'AMG/', 'args': { 'test':[], 'small':[], 'large':[] }
+        'CoMD': { 'rundir':'CoMD/', 'build':{ 'dir':'CoMD'+'/src-mpi/', 'args':[] } },
+        'HPCCG-1.0': { 'rundir':'HPCCG-1.0/', 'build':{ 'dir':'HPCCG-1.0/', 'args':[] } },
+        'lulesh': { 'rundir':'lulesh/', 'build':{ 'dir':'lulesh/', 'args':[] } },
+        'XSBench': { 'rundir':'XSBench/src/', 'build':{ 'dir':'XSBench/src/', 'args':[] } },
+        'miniFE': { 'rundir':'miniFE/ref/src/', 'build':{ 'dir':'miniFE/ref/src/', 'args':[] } },
+        'BT': {'rundir':NASBASEDIR_SERIAL+'BT/','builddir':NASBASEDIR_SERIAL+'BT/','args':{ 'test': ['BT','CLASS=S'], 'small': ['BT','CLASS=A'], 'large': ['BT', 'CLASS=B'] } },
+        'BT': {'rundir':NASBASEDIR_SERIAL+'BT/','builddir':NASBASEDIR_SERIAL+'BT/','args':{ 'test': ['BT','CLASS=S'], 'small': ['BT','CLASS=A'], 'large': ['BT', 'CLASS=B'] } },
+        'BT': {'rundir':NASBASEDIR_SERIAL+'BT/','builddir':NASBASEDIR_SERIAL+'BT/','args':{ 'test': ['BT','CLASS=S'], 'small': ['BT','CLASS=A'], 'large': ['BT', 'CLASS=B'] } },
+        'BT': {'rundir':NASBASEDIR_SERIAL+'BT/','builddir':NASBASEDIR_SERIAL+'BT/','args':{ 'test': ['BT','CLASS=S'], 'small': ['BT','CLASS=A'], 'large': ['BT', 'CLASS=B'] } },
+        'BT': {'rundir':NASBASEDIR_SERIAL+'BT/','builddir':NASBASEDIR_SERIAL+'BT/','args':{ 'test': ['BT','CLASS=S'], 'small': ['BT','CLASS=A'], 'large': ['BT', 'CLASS=B'] } },
+        'BT': {'rundir':NASBASEDIR_SERIAL+'BT/','builddir':NASBASEDIR_SERIAL+'BT/','args':{ 'test': ['BT','CLASS=S'], 'small': ['BT','CLASS=A'], 'large': ['BT', 'CLASS=B'] } },
+        'BT': {'rundir':NASBASEDIR_SERIAL+'BT/','builddir':NASBASEDIR_SERIAL+'BT/','args':{ 'test': ['BT','CLASS=S'], 'small': ['BT','CLASS=A'], 'large': ['BT', 'CLASS=B'] } },
+        'BT': {'rundir':NASBASEDIR_SERIAL+'BT/','builddir':NASBASEDIR_SERIAL+'BT/','args':{ 'test': ['BT','CLASS=S'], 'small': ['BT','CLASS=A'], 'large': ['BT', 'CLASS=B'] } },
+        'BT': {'rundir':NASBASEDIR_SERIAL+'BT/','builddir':NASBASEDIR_SERIAL+'BT/','args':{ 'test': ['BT','CLASS=S'], 'small': ['BT','CLASS=A'], 'large': ['BT', 'CLASS=B'] } },
+        'BT': {'rundir':NASBASEDIR_SERIAL+'BT/','builddir':NASBASEDIR_SERIAL+'BT/','args':{ 'test': ['BT','CLASS=S'], 'small': ['BT','CLASS=A'], 'large': ['BT', 'CLASS=B'] } },
+    },
+    'omp': {
+        'AMG': { 'rundir':'AMG/test/', 'build':{ 'dir':'AMG/', 'args':[] } },
+        'CoMD': { 'rundir':'CoMD/', 'build':{ 'dir':'CoMD'+'/src-openmp/', 'args':[] } },
+        'HPCCG-1.0': { 'rundir':'HPCCG-1.0/', 'build':{ 'dir':'HPCCG-1.0/', 'args':[] } },
+        'lulesh': { 'rundir':'lulesh/', 'build':{ 'dir':'lulesh/', 'args':[] } },
+        'XSBench': { 'rundir':'XSBench/src/', 'build':{ 'dir':'XSBench/src/', 'args':[] } },
+        'miniFE': { 'rundir':'miniFE/openmp-opt/src/', 'build':{ 'dir':'miniFE/openmp-opt/src/', 'args':[] } },
+        'BT': { 'rundir':NASBASEDIR_OMP+'BT/', 'build':{ 'dir':NASBASEDIR_OMP+'BT/', 'args':['BT','CLASS='+NAS[INPUT]['BT']['CLASS']] } },
+        'CG': { 'rundir':NASBASEDIR_OMP+'CG/', 'build':{ 'dir':NASBASEDIR_OMP+'CG/', 'args':['CG','CLASS='+NAS[INPUT]['CG']['CLASS']] } },
+        'DC': { 'rundir':NASBASEDIR_OMP+'DC/', 'build':{ 'dir':NASBASEDIR_OMP+'DC/', 'args':['DC','CLASS='+NAS[INPUT]['DC']['CLASS']] } },
+        'EP': { 'rundir':NASBASEDIR_OMP+'EP/', 'build':{ 'dir':NASBASEDIR_OMP+'EP/', 'args':['EP','CLASS='+NAS[INPUT]['EP']['CLASS']] } },
+        'FT': { 'rundir':NASBASEDIR_OMP+'FT/', 'build':{ 'dir':NASBASEDIR_OMP+'FT/', 'args':['FT','CLASS='+NAS[INPUT]['FT']['CLASS']] } },
+        'LU': { 'rundir':NASBASEDIR_OMP+'LU/', 'build':{ 'dir':NASBASEDIR_OMP+'LU/', 'args':['LU','CLASS='+NAS[INPUT]['LU']['CLASS']] } },
+        'MG': { 'rundir':NASBASEDIR_OMP+'MG/', 'build':{ 'dir':NASBASEDIR_OMP+'MG/', 'args':['MG','CLASS='+NAS[INPUT]['MG']['CLASS']] } },
+        'SP': { 'rundir':NASBASEDIR_OMP+'SP/', 'build':{ 'dir':NASBASEDIR_OMP+'SP/', 'args':['SP','CLASS='+NAS[INPUT]['SP']['CLASS']] } },
+        'UA': { 'rundir':NASBASEDIR_OMP+'UA/', 'build':{ 'dir':NASBASEDIR_OMP+'UA/', 'args':['UA','CLASS='+NAS[INPUT]['UA']['CLASS']] } },
+    }
 }
 
 execs = {
-'AMG'       : AMG[INPUT],
-'CoMD'      : CoMD[INPUT],
-'HPCCG-1.0' : HPCCG[INPUT],
-'lulesh'    : lulesh[INPUT],
-'XSBench'   : XSBench[INPUT],
-'miniFE'    : miniFE[INPUT],
-'BT':[NASBASEDIR+'bin/bt.'+NAS[INPUT]['BT']['CLASS']+'.x'],
-'CG':[NASBASEDIR+'bin/cg.'+NAS[INPUT]['CG']['CLASS']+'.x'],
-'DC':[NASBASEDIR+'bin/dc.'+NAS[INPUT]['DC']['CLASS']+'.x'],
-'EP':[NASBASEDIR+'bin/ep.'+NAS[INPUT]['EP']['CLASS']+'.x'],
-'FT':[NASBASEDIR+'bin/ft.'+NAS[INPUT]['FT']['CLASS']+'.x'],
-'LU':[NASBASEDIR+'bin/lu.'+NAS[INPUT]['LU']['CLASS']+'.x'],
-'MG':[NASBASEDIR+'bin/lu.'+NAS[INPUT]['MG']['CLASS']+'.x'],
-'SP':[NASBASEDIR+'bin/sp.'+NAS[INPUT]['SP']['CLASS']+'.x'],
-'UA':[NASBASEDIR+'bin/ua.'+NAS[INPUT]['UA']['CLASS']+'.x'],
+    'serial' : {
+        'AMG' : {
+            'test'  : ['/AMG/test/amg', '-n', '32', '32', '32'],
+            'small' : ['/AMG/test/amg', '-n', '96', '96', '96'],
+            'large' : ['/AMG/test/amg', '-n', '256', '256', '256'],
+        }
+
+        'CoMD' : {
+            'test'  : ['/CoMD/bin/CoMD-serial', '-d', './pots/', '-e', '-i', '1', '-j', '1', '-k', '1', '-x', '4', '-y', '4', '-z', '4'],
+            'small' : ['/CoMD/bin/CoMD-serial', '-d', './pots/', '-e', '-i', '1', '-j', '1', '-k', '1', '-x', '32', '-y', '32', '-z', '32'],
+            'large' : ['/CoMD/bin/CoMD-serial', '-d', './pots/', '-e', '-i', '1', '-j', '1', '-k', '1', '-x', '64', '-y', '64', '-z', '64']
+
+        }
+
+        'HPCCG-1.0' : {
+            'test:' : ['HPCCG-1.0/test_HPCCG', '32', '32', '32'],
+            'small' : ['HPCCG-1.0/test_HPCCG', '128', '128', '128'],
+            'large' : ['HPCCG-1.0/test_HPCCG', '256', '256', '256']
+        }
+
+        'lulesh' : {
+            'test'  : ['lulesh/lulesh2.0', '-i', '10'],
+            'small' : ['lulesh/lulesh2.0'],
+            'large' : ['lulesh/lulesh2.0', '-s', '50'],
+        }
+        # XXX: XSBench needs the number of threads
+        'XSBench' : {
+            'test'  : ['/XSBench/src/XSBench','-s','small', '-l', '100000'],
+            'small' : ['/XSBench/src/XSBench','-s','small'],
+            'large' : ['/XSBench/src/XSBench','-s','large','-t',NTHREADS],
+        }
+
+        'miniFE' : {
+            'test'  : ['/miniFE/ref/src/miniFE.x','-nx','16','-ny','16','-nz','16'],
+            'small' : ['/miniFE/ref/src/miniFE.x','-nx','64','-ny','64','-nz','64'],
+            'large' : ['/miniFE/ref/src/miniFE.x','-nx','256','-ny','256','-nz','256'],
+        }
+
+        'BT': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/bt.S.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/bt.A.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/bt.B.x'],
+        }
+
+        'CG': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/cg.S.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/cg.B.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/cg.C.x'],
+        }
+        'DC': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/dc.W.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/dc.W.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/dc.A.x'],
+        }
+        'EP': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/ep.S.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/ep.A.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/ep.C.x'],
+        }
+        'FT': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/ft.S.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/ft.B.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/ft.B.x'],
+        }
+        'IS': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/is.S.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/is.A.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/is.A.x'],
+        }
+        'LU': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/lu.S.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/lu.A.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/lu.C.x'],
+        }
+        'MG': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/mg.S.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/mg.B.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/mg.C.x'],
+        }
+        'SP': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/sp.S.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/sp.A.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/sp.B.x'],
+        }
+        'UA': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/ua.S.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/ua.B.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/ua.B.x'],
+        }
+    }
+    # XXX: Used by refine
+    'serial-noff' : {
+        'AMG' : {
+            'test'  : ['/AMG/test/amg', '-n', '32', '32', '32'],
+            'small' : ['/AMG/test/amg', '-n', '96', '96', '96'],
+            'large' : ['/AMG/test/amg', '-n', '256', '256', '256'],
+        }
+
+        'CoMD' : {
+            'test'  : ['/CoMD/bin/CoMD-serial', '-d', './pots/', '-e', '-i', '1', '-j', '1', '-k', '1', '-x', '4', '-y', '4', '-z', '4'],
+            'small' : ['/CoMD/bin/CoMD-serial', '-d', './pots/', '-e', '-i', '1', '-j', '1', '-k', '1', '-x', '32', '-y', '32', '-z', '32'],
+            'large' : ['/CoMD/bin/CoMD-serial', '-d', './pots/', '-e', '-i', '1', '-j', '1', '-k', '1', '-x', '64', '-y', '64', '-z', '64']
+
+        }
+
+        'HPCCG-1.0' : {
+            'test:' : ['HPCCG-1.0/test_HPCCG', '32', '32', '32'],
+            'small' : ['HPCCG-1.0/test_HPCCG', '128', '128', '128'],
+            'large' : ['HPCCG-1.0/test_HPCCG', '256', '256', '256']
+        }
+
+        'lulesh' : {
+            'test'  : ['lulesh/lulesh2.0', '-i', '10'],
+            'small' : ['lulesh/lulesh2.0'],
+            'large' : ['lulesh/lulesh2.0', '-s', '50'],
+        }
+        # XXX: XSBench needs the number of threads
+        'XSBench' : {
+            'test'  : ['/XSBench/src/XSBench','-s','small', '-l', '100000'],
+            'small' : ['/XSBench/src/XSBench','-s','small'],
+            'large' : ['/XSBench/src/XSBench','-s','large','-t',NTHREADS],
+        }
+
+        'miniFE' : {
+            'test'  : ['/miniFE/ref/src/miniFE.x','-nx','16','-ny','16','-nz','16'],
+            'small' : ['/miniFE/ref/src/miniFE.x','-nx','64','-ny','64','-nz','64'],
+            'large' : ['/miniFE/ref/src/miniFE.x','-nx','256','-ny','256','-nz','256'],
+        }
+
+        'BT': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/bt.S.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/bt.A.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/bt.B.x'],
+        }
+
+        'CG': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/cg.S.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/cg.B.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/cg.C.x'],
+        }
+        'DC': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/dc.W.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/dc.W.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/dc.A.x'],
+        }
+        'EP': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/ep.S.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/ep.A.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/ep.C.x'],
+        }
+        'FT': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/ft.S.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/ft.B.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/ft.B.x'],
+        }
+        'IS': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/is.S.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/is.A.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/is.A.x'],
+        }
+        'LU': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/lu.S.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/lu.A.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/lu.C.x'],
+        }
+        'MG': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/mg.S.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/mg.B.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/mg.C.x'],
+        }
+        'SP': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/sp.S.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/sp.A.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/sp.B.x'],
+        }
+        'UA': {
+            'test'  : [NASBASEDIR_SERIAL+'bin/ua.S.x'],
+            'small' : [NASBASEDIR_SERIAL+'bin/ua.B.x'],
+            'large' : [NASBASEDIR_SERIAL+'bin/ua.B.x'],
+        }
+    }
+    'omp' : {
+        'AMG' : {
+            'test'  : ['/AMG/test/amg', '-n', '32', '32', '32'],
+            'small' : ['/AMG/test/amg', '-n', '96', '96', '96'],
+            'large' : ['/AMG/test/amg', '-n', '256', '256', '256'],
+        }
+
+        'CoMD' : {
+            'test'  : ['/CoMD/bin/CoMD-openmp', '-d', './pots/', '-e', '-i', '1', '-j', '1', '-k', '1', '-x', '4', '-y', '4', '-z', '4'],
+            'small' : ['/CoMD/bin/CoMD-openmp', '-d', './pots/', '-e', '-i', '1', '-j', '1', '-k', '1', '-x', '32', '-y', '32', '-z', '32'],
+            'large' : ['/CoMD/bin/CoMD-openmp', '-d', './pots/', '-e', '-i', '1', '-j', '1', '-k', '1', '-x', '64', '-y', '64', '-z', '64']
+
+        }
+
+        'HPCCG-1.0' : {
+            'test:' : ['HPCCG-1.0/test_HPCCG', '32', '32', '32'],
+            'small' : ['HPCCG-1.0/test_HPCCG', '128', '128', '128'],
+            'large' : ['HPCCG-1.0/test_HPCCG', '256', '256', '256']
+        }
+
+        'lulesh' : {
+            'test'  : ['lulesh/lulesh2.0', '-i', '10'],
+            'small' : ['lulesh/lulesh2.0'],
+            'large' : ['lulesh/lulesh2.0', '-s', '50'],
+        }
+        # XXX: XSBench needs the number of threads
+        'XSBench' : {
+            'test'  : ['/XSBench/src/XSBench','-s','small', '-l', '100000'],
+            'small' : ['/XSBench/src/XSBench','-s','small'],
+            'large' : ['/XSBench/src/XSBench','-s','large','-t',NTHREADS],
+        }
+
+        'miniFE' : {
+            'test'  : ['/miniFE/openmp-opt/src/miniFE.x','-nx','16','-ny','16','-nz','16'],
+            'small' : ['/miniFE/openmp-opt/src/miniFE.x','-nx','64','-ny','64','-nz','64'],
+            'large' : ['/miniFE/openmp-opt/src/miniFE.x','-nx','256','-ny','256','-nz','256'],
+        }
+
+        'BT': {
+            'test'  : [NASBASEDIR_OMP+'bin/bt.S.x'],
+            'small' : [NASBASEDIR_OMP+'bin/bt.A.x'],
+            'large' : [NASBASEDIR_OMP+'bin/bt.B.x'],
+        }
+
+        'CG': {
+            'test'  : [NASBASEDIR_OMP+'bin/cg.S.x'],
+            'small' : [NASBASEDIR_OMP+'bin/cg.B.x'],
+            'large' : [NASBASEDIR_OMP+'bin/cg.C.x'],
+        }
+        'DC': {
+            'test'  : [NASBASEDIR_OMP+'bin/dc.W.x'],
+            'small' : [NASBASEDIR_OMP+'bin/dc.W.x'],
+            'large' : [NASBASEDIR_OMP+'bin/dc.A.x'],
+        }
+        'EP': {
+            'test'  : [NASBASEDIR_OMP+'bin/ep.S.x'],
+            'small' : [NASBASEDIR_OMP+'bin/ep.A.x'],
+            'large' : [NASBASEDIR_OMP+'bin/ep.C.x'],
+        }
+        'FT': {
+            'test'  : [NASBASEDIR_OMP+'bin/ft.S.x'],
+            'small' : [NASBASEDIR_OMP+'bin/ft.B.x'],
+            'large' : [NASBASEDIR_OMP+'bin/ft.B.x'],
+        }
+        'IS': {
+            'test'  : [NASBASEDIR_OMP+'bin/is.S.x'],
+            'small' : [NASBASEDIR_OMP+'bin/is.A.x'],
+            'large' : [NASBASEDIR_OMP+'bin/is.A.x'],
+        }
+        'LU': {
+            'test'  : [NASBASEDIR_OMP+'bin/lu.S.x'],
+            'small' : [NASBASEDIR_OMP+'bin/lu.A.x'],
+            'large' : [NASBASEDIR_OMP+'bin/lu.C.x'],
+        }
+        'MG': {
+            'test'  : [NASBASEDIR_OMP+'bin/mg.S.x'],
+            'small' : [NASBASEDIR_OMP+'bin/mg.B.x'],
+            'large' : [NASBASEDIR_OMP+'bin/mg.C.x'],
+        }
+        'SP': {
+            'test'  : [NASBASEDIR_OMP+'bin/sp.S.x'],
+            'small' : [NASBASEDIR_OMP+'bin/sp.A.x'],
+            'large' : [NASBASEDIR_OMP+'bin/sp.B.x'],
+        }
+        'UA': {
+            'test'  : [NASBASEDIR_OMP+'bin/ua.S.x'],
+            'small' : [NASBASEDIR_OMP+'bin/ua.B.x'],
+            'large' : [NASBASEDIR_OMP+'bin/ua.B.x'],
+        }
+    }
 }
 
 ifiles = {
