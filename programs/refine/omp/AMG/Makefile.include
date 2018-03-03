@@ -50,5 +50,5 @@ INCLUDE_CFLAGS = -g -O2 -DHYPRE_SEQUENTIAL=1 -DHYPRE_USING_OPENMP -DHYPRE_HOPSCO
 # set link flags here
 #INCLUDE_LFLAGS = -lm -qsmp=omp
 #INCLUDE_LFLAGS = -lm -fopenmp
-INCLUDE_LFLAGS = -lm -L $(HOME)/usr/local/lib -linject_omp-thread -fopenmp
+INCLUDE_LFLAGS = -lm -L $(HOME)/usr/local/lib -linject_omp -fopenmp
 
