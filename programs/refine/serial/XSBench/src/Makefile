@@ -39,7 +39,7 @@ obj = $(source:.c=.o)
 CFLAGS := -std=gnu99 -mllvm -fi -mllvm -fi-funcs="*" -mllvm -fi-inst-types=frame,control,data -mllvm -fi-reg-types=dst
 
 # Linker Flags
-LDFLAGS = -lm
+LDFLAGS = -lm -linject_ser_noff
 
 # Regular gcc Compiler
 ifeq ($(COMPILER),gnu)
@@ -135,11 +135,8 @@ endif
 # Targets to Build
 #===============================================================================
 
-$(program): $(obj) XSbench_header.h doInject.o
-	$(CC) $(CFLAGS) $(obj) doInject.o -o $@ $(LDFLAGS)
-
-doInject.o: $(HOME)/projects/llnl/llvm-fi/injectlib/doInject.c
-	$(CC) -O3 -c $< -o $@
+$(program): $(obj) XSbench_header.h
+	$(CC) $(CFLAGS) $(obj) -o $@ $(LDFLAGS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@

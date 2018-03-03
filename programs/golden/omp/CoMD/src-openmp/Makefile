@@ -16,7 +16,7 @@ DO_MPI = OFF
 ### own.  If you need any -L or -l switches to get C standard libraries
 ### (such as -lm for the math library) put them in C_LIB.
 CC = $(HOME)/usr/local/bin/clang
-CFLAGS = -std=c99 -fopenmp
+CFLAGS = -std=c99 -fopenmp -I $(HOME)/usr/local/include
 OPTFLAGS = -g -O3
 INCLUDES = 
 C_LIB = -lm

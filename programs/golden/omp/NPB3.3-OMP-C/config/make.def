@@ -87,7 +87,7 @@ C_LIB  = -lm
 #---------------------------------------------------------------------------
 # These macros are passed to the compiler 
 #---------------------------------------------------------------------------
-C_INC = -I../common
+C_INC = -I../common -I $(HOME)/usr/local/include
 
 #---------------------------------------------------------------------------
 # Global *compile time* flags for C programs
@@ -104,7 +104,7 @@ C_INC = -I../common
 # _LARGEFILE64_SOURCE - are standard compiler flags which allow to work with 
 # files larger than 2GB.
 #---------------------------------------------------------------------------
-CFLAGS	= -g -Wall -O3 -fopenmp -mcmodel=medium
+CFLAGS	= -g -Wall -O3 -fopenmp
 
 #---------------------------------------------------------------------------
 # Global *link time* flags. Flags for increasing maximum executable 

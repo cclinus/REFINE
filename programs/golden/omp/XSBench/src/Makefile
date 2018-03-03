@@ -10,7 +10,7 @@ PROFILE     = no
 MPI         = no
 PAPI        = no
 VEC_INFO    = no
-VERIFY      = yes
+VERIFY      = yes 
 BENCHMARK   = no
 BINARY_DUMP = no
 BINARY_READ = no
@@ -36,7 +36,7 @@ obj = $(source:.c=.o)
 #===============================================================================
 
 # Standard Flags
-CFLAGS := -std=gnu99
+CFLAGS := -std=gnu99 -I $(HOME)/usr/local/include
 
 # Linker Flags
 LDFLAGS = -lm
