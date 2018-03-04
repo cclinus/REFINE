@@ -6,7 +6,6 @@
 #include <string>
 
 #include <assert.h>
-//#include <atomic>
 
 #include "pin.H"
 #include "utils.h"
@@ -21,15 +20,18 @@ KNOB<bool> save_instr(KNOB_MODE_WRITEONCE, "pintool",
 KNOB<string> instrument_file(KNOB_MODE_WRITEONCE, "pintool",
     "instr-file", "pin.instrument.txt", "shows details of the instruction instrumentation");
 
-//std::atomic<UINT64> fi_iterator = 0;
-UINT64 fi_iterator = 0;
+#define MAX_THREADS 256
+// 64B alignment TODO: use sysconf or similar to set padding at runtime
+static union { UINT64 v; char pad[64]; } fi_iterator[MAX_THREADS] __attribute__((aligned(64))) = { 0 };
+//static UINT64 fi_iterator_atomic = 0;
+int gtid = 0;
 
 std::fstream instrument_ofstream;
 
-VOID countInst(UINT32 c)
+VOID countInst(THREADID tid, UINT32 c)
 {
-  //fi_iterator += c;
-  __atomic_add_fetch(&fi_iterator, c, __ATOMIC_SEQ_CST);
+  fi_iterator[tid].v += c;
+  //__atomic_add_fetch(&fi_iterator_atomic, c, __ATOMIC_SEQ_CST);
 }
 
 // Pin calls this function every time a new instruction is encountered
@@ -49,10 +51,16 @@ VOID CountInst(TRACE trace, VOID *v)
         }
 
       if(num_insts > 0) {
-        BBL_InsertCall(bbl, IPOINT_BEFORE, (AFUNPTR)countInst, IARG_UINT32, num_insts, IARG_END);
+        BBL_InsertCall(bbl, IPOINT_BEFORE, (AFUNPTR)countInst, IARG_THREAD_ID, IARG_UINT32, num_insts, IARG_END);
         //cerr << "Found BBL at " << std::hex << "0x" << BBL_Address(bbl) << " - " << "0x" << ( BBL_Address(bbl) + BBL_Size(bbl) ) << endl;
       }
     }
+}
+
+VOID ThreadStart(THREADID tid, CONTEXT *ctx, INT32 flags, VOID *v)
+{
+  //gtid++;
+  __atomic_fetch_add(&gtid, 1, __ATOMIC_SEQ_CST);
 }
 
 VOID Fini(INT32 code, VOID *v)
@@ -61,9 +69,15 @@ VOID Fini(INT32 code, VOID *v)
   ofstream OutFile;
   OutFile.open(instcount_file.Value().c_str());
   OutFile.setf(ios::showbase);
-  OutFile << "fi_index=" << fi_iterator << endl;
-
+  UINT64 sum = 0;
+  for(int i = 0; i < gtid; i++) {
+    OutFile << "thread=" << i << ", fi_index=" << fi_iterator[i].v << endl;
+    sum += fi_iterator[i].v;
+  }
   OutFile.close();
+
+  //cerr << "Sum: " << sum << " -- atomic: " << fi_iterator_atomic << "\n";
+  cerr << "Sum: " << sum << "\n";
 
   if(save_instr.Value())
     instrument_ofstream.close();
@@ -93,6 +107,7 @@ int main(int argc, char * argv[])
     assert(instrument_ofstream.is_open() && "Cannot open instrumentation output file\n");
   }
 
+  PIN_AddThreadStartFunction(ThreadStart, 0);
   // Register CountInst to be called to instrument instructions in a trace
   TRACE_AddInstrumentFunction(CountInst, 0);
 

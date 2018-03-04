@@ -8,39 +8,44 @@
 #include "utils.h"
 #include "instselector.h"
 #include <inttypes.h>
-#include <stdatomic.h>
+//#include <stdatomic.h>
 
 //#define VERBOSE
 
+#define MAX_THREADS 256
+// 64B alignment TODO: use sysconf or similar to set padding at runtime
+static union { UINT64 v; char pad[64]; } fi_iterator[MAX_THREADS] __attribute__((aligned(64))) = { 0 };
 // XXX: instr_iterator is global, *NOT* per thread, static instrumentation
 static UINT64 instr_iterator = 0;
-static UINT64 fi_iterator = 0;
-static bool detach = false;
+int gtid = 0;
 
-VOID injectReg(VOID *ip, UINT64 idx, UINT32 op, REG reg, PIN_REGISTER *val)
+// XXX: detach is faulty on Mac, emulate as closely possibly
+//static bool detach = false;
+
+// FI variables
+static int fi_thread = -1;
+
+VOID injectReg(THREADID tid, VOID *ip, UINT64 idx, UINT32 op, REG reg, CONTEXT *ctx)
 {
-    if(detach)
-        return;
+    if((int)tid != fi_thread)
+      return;
 
-    UINT64 fi_iterator_local = __atomic_add_fetch(&fi_iterator, 1, __ATOMIC_SEQ_CST);
-    //fi_iterator_local++;
+    // XXX: emulate detach
+    /*if(detach)
+      return;*/
 
-    if ( fi_iterator_local < fi_index )
-        return;
+    fi_iterator[tid].v++;
 
-    // XXX: !!! CAUTION !!! WARNING !!! CALLING PIN_Detach breaks injection that changes
-    // registers. It seems Pin does not transfer the changed state after detaching
-    if ( fi_iterator_local > fi_index) {
-#if 0 // FAULTY
-        // XXX: One fault per run, thus remove instr. and detach to speedup execution
-        // This can be changed to allow multiple errors
-        cerr << "PIN_Detach!\n"; //ggout
+    if ( fi_iterator[tid].v > fi_index ) {
+        // XXX: emulated detach
+        //detach = true;
         PIN_Detach();
-#endif
-        detach = true;
-        PIN_RemoveInstrumentation();
+        //printf("DETACH thread=%d fi_thread %d fi_iterator %" PRIu64 "\n", tid, fi_thread, fi_iterator[tid].v);
         return;
     }
+
+    if ( fi_iterator[tid].v < fi_index )
+        return;
 
     if(action == DO_RANDOM) {
         UINT32 size_bits = REG_Size(reg)*8;
@@ -48,13 +53,15 @@ VOID injectReg(VOID *ip, UINT64 idx, UINT32 op, REG reg, PIN_REGISTER *val)
 
         fi_output_fstream.open(injection_file.Value().c_str(), std::fstream::out);
         assert(fi_output_fstream.is_open() && "Cannot open injection output file\n");
-        fi_output_fstream << "fi_index=" << fi_iterator_local << ", fi_instr_index=" << idx << ", op=" << op
+        fi_output_fstream << "thread=" << tid << ", fi_index=" << fi_iterator[tid].v << ", fi_instr_index=" << idx << ", op=" << op
             << ", reg=" << REG_StringShort(reg) << ", bitflip=" << fi_bit_flip << ", addr=" << hexstr(ip) << std::endl;
         fi_output_fstream.close();
     }
 
-    cerr << "INJECT fi_index=" << fi_iterator_local << ", fi_instr_index=" << idx << ", op=" << op
-            << ", reg=" << REG_StringShort(reg) << ", bitflip=" << fi_bit_flip << ", addr=" << hexstr(ip) << std::endl;
+    fi_bit_flip=12;//105; //ggout
+
+    cerr << "INJECT fi_index=" << fi_iterator[tid].v << ", fi_instr_index=" << idx << ", op=" << op
+        << ", reg=" << REG_StringShort(reg) << ", bitflip=" << fi_bit_flip << ", addr=" << hexstr(ip) << std::endl;
 
     UINT32 inject_byte = fi_bit_flip/8;
     UINT32 inject_bit = fi_bit_flip%8;
@@ -65,7 +72,11 @@ VOID injectReg(VOID *ip, UINT64 idx, UINT32 op, REG reg, PIN_REGISTER *val)
         LOG(hexstr(val->byte[i]) + " ");
 #endif
 
-    val->byte[inject_byte] = (val->byte[inject_byte] ^ (1U << inject_bit));
+    PIN_REGISTER val;
+    PIN_GetContextRegval(ctx, reg, val.byte);
+    //val->byte[inject_byte] = (val->byte[inject_byte] ^ (1U << inject_bit));
+    val.byte[inject_byte] = (val.byte[inject_byte] ^ (1U << inject_bit));
+    PIN_SetContextRegval(ctx, reg, val.byte);
 
 #ifdef VERBOSE
     LOG(" bitflip:" + decstr(fi_bit_flip) +", reg " + REG_StringShort(reg) + ", val ");
@@ -218,12 +229,18 @@ VOID InstrumentIns(INS ins, VOID *v) {
         else
             IPoint = IPOINT_AFTER;
 
+        // XXX: Use IARG_PARTIAL_CONTEXT instead of IARG_REG_REFERENCE because
+        // some registers are unavailable from the latter
+        REGSET regsIn, regsOut;
+        REGSET_Insert(regsIn, reg);
+        REGSET_Insert(regsOut, reg);
         INS_InsertCall(ins, IPoint, AFUNPTR(injectReg),
+                IARG_THREAD_ID,
                 IARG_ADDRINT, INS_Address(ins),
                 IARG_UINT64, instr_iterator,
                 IARG_UINT32, op,
                 IARG_UINT32, reg,
-                IARG_REG_REFERENCE, reg,
+                IARG_PARTIAL_CONTEXT, &regsIn, &regsOut,
                 IARG_END);
     }
     // Inject to MEM
@@ -262,8 +279,9 @@ VOID InstrumentIns(INS ins, VOID *v) {
 
 VOID InstrumentTrace(TRACE trace, VOID *v)
 {
-    if(detach)
-        return;
+    // XXX: emulate detach
+    /*if(detach)
+        return;*/
 
     if(isValidTrace(trace))
         for( BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl) ) {
@@ -272,6 +290,12 @@ VOID InstrumentTrace(TRACE trace, VOID *v)
                 if(isValidInst(ins))
                     InstrumentIns(ins, v);
         }
+}
+
+VOID ThreadStart(THREADID tid, CONTEXT *ctx, INT32 flags, VOID *v)
+{
+  //cerr << "PIN tid: " << tid << "\n"; //ggout
+  __atomic_add_fetch(&gtid, 1, __ATOMIC_SEQ_CST);
 }
 
 VOID Init()
@@ -289,10 +313,11 @@ VOID Init()
         assert(fi_instr_index > 0 && "fi_instr_index <= 0!\n");
     }
     else if( (fp = fopen(target_file.Value().c_str(), "r") ) != NULL) {
-        int ret = fscanf(fp, "fi_index=%"PRIu64"\n", &fi_index);
-        cerr << "TARGET fi_index=" << fi_index <<" RANDOM INJECTION" << endl;
-        assert(ret == 1 && "fscanf failed!\n");
+        int ret = fscanf(fp, "thread=%d, fi_index=%"PRIu64"\n", &fi_thread, &fi_index);
+        cerr << "TARGET fi_thread=" << fi_thread << ", fi_index=" << fi_index <<" RANDOM INJECTION" << endl;
+        assert(ret == 2 && "fscanf failed!\n");
         action = DO_RANDOM;
+        assert(fi_thread >= 0 && "fi_thread < 0!\n");
         assert(fi_index > 0 && "fi_index <= 0!\n");
     }
     else {
@@ -334,6 +359,7 @@ int main(int argc, char *argv[])
 
     Init();
 
+    PIN_AddThreadStartFunction(ThreadStart, 0);
     TRACE_AddInstrumentFunction(InstrumentTrace, 0);
 
     PIN_AddFiniFunction(Fini, 0);
