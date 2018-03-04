@@ -15,12 +15,14 @@
 // XXX: instr_iterator is global, *NOT* per thread, static instrumentation
 static UINT64 instr_iterator = 0;
 static UINT64 fi_iterator = 0;
-static bool detach = false;
+// XXX: emulate detach
+//static bool detach = false;
 
 VOID injectReg(VOID *ip, UINT64 idx, UINT32 op, REG reg, PIN_REGISTER *val)
 {
-    if(detach)
-        return;
+    // XXX: emulate detach
+    /*if(detach)
+        return;*/
 
     fi_iterator++;
 
@@ -30,14 +32,13 @@ VOID injectReg(VOID *ip, UINT64 idx, UINT32 op, REG reg, PIN_REGISTER *val)
     // XXX: !!! CAUTION !!! WARNING !!! CALLING PIN_Detach breaks injection that changes
     // registers. It seems Pin does not transfer the changed state after detaching
     if ( fi_iterator > fi_index) {
-#if 0 // FAULTY
         // XXX: One fault per run, thus remove instr. and detach to speedup execution
         // This can be changed to allow multiple errors
-        cerr << "PIN_Detach!\n"; //ggout
+        //cerr << "PIN_Detach!\n"; //ggout
         PIN_Detach();
-#endif
-        detach = true;
-        PIN_RemoveInstrumentation();
+        // XXX: emulate detach
+        /*detach = true;
+        PIN_RemoveInstrumentation();*/
         return;
     }
 
@@ -261,8 +262,9 @@ VOID InstrumentIns(INS ins, VOID *v) {
 
 VOID InstrumentTrace(TRACE trace, VOID *v)
 {
-    if(detach)
-        return;
+    // XXX: emulate detach
+    /*if(detach)
+        return;*/
 
     if(isValidTrace(trace))
         for( BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl) ) {
