@@ -445,6 +445,7 @@ namespace {
             SmallVector< std::pair<MachineBasicBlock *, MachineBasicBlock *>, 32> MBBs;
             for(auto &MBB: MF) {
               MachineBasicBlock *CloneMBB = MF.CreateMachineBasicBlock(nullptr);
+              CloneMBB->setIsEHPad( MBB.isEHPad() );
               MBBs.push_back(std::make_pair(&MBB, CloneMBB));
             }
 
@@ -455,6 +456,7 @@ namespace {
               // calling a function, at the function head only. No way (yet) of FF function calls
               MachineBasicBlock *MBB = MBBPair.first;
               MachineBasicBlock *CloneMBB = MBBPair.second;
+
               MF.push_back(CloneMBB);
 
               // Copy instructions
@@ -462,7 +464,7 @@ namespace {
                 MachineInstr *MI = &*Iter;
                 // XXX: avoid copying non-duplicatable instructions: pseudo instructions, DBG or EH labels
                 if(MI->isNotDuplicable())
-                  continue;
+                  continue; //ggout ggin
                 MachineInstr *CopyMI = MF.CloneMachineInstr(MI);
                 CloneMBB->push_back(CopyMI);
               }
@@ -493,8 +495,15 @@ namespace {
             SmallVector<MachineOperand, 4> Cond;
             for(auto MBBPair: MBBs) {
               //dbgs() << "Terminator update for:";
-              //CloneMBB->dump(); //ggout
               MachineBasicBlock *CloneMBB = MBBPair.second;
+              /*dbgs() << "==== UPDATE TERMINATORS ====\n";
+              dbgs() << "==== original ====\n";
+              MBBPair.first->dump();
+              dbgs() << "==== end original ====\n";
+              dbgs() << "==== clone ====\n";
+              CloneMBB->dump(); //ggout
+              dbgs() << "==== end clone ====\n";
+              dbgs() << "==== END UPDATE TERMINATORS ====\n";*/ //ggout
               if( !TII.analyzeBranch(*CloneMBB, TBB, FBB, Cond) )
                 CloneMBB->updateTerminator();
             }
