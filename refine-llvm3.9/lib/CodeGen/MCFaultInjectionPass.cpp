@@ -650,14 +650,23 @@ namespace {
 
               MBB->updateTerminator();
 
+              // XXX: Need to update terminators *ONLY* if it's an analyzable branch (e.g., NOT an indirect branch)
               MachineBasicBlock *TBB = nullptr, *FBB = nullptr;
               SmallVector<MachineOperand, 4> Cond;
-              // XXX: Need to update terminators *ONLY* if it's an analyzable branch (e.g., NOT an indirect branch)
               if( !TII.analyzeBranch(*OriginalMBB, TBB, FBB, Cond) )
                 OriginalMBB->updateTerminator();
+
               TBB = nullptr; FBB = nullptr; Cond.clear();
               if( !TII.analyzeBranch(*CopyMBB, TBB, FBB, Cond) )
                 CopyMBB->updateTerminator();
+
+              TBB = nullptr; FBB = nullptr; Cond.clear();
+              if( !TII.analyzeBranch(*CopyMBB, TBB, FBB, Cond) )
+                JmpDetachMBB->updateTerminator();
+
+              TBB = nullptr; FBB = nullptr; Cond.clear();
+              if( !TII.analyzeBranch(*CopyMBB, TBB, FBB, Cond) )
+                JmpFIMBB->updateTerminator();
 
               /*CopyMBB->dump();
                 dbgs() << "ORIGINAL\n";
