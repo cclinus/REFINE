@@ -30,7 +30,7 @@ void emitPushReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, const MC
 
     BuildMI(MBB, I, DebugLoc(), TII.get(X86::PUSH64r)).addReg(Reg);
     StackOffset -= 8;
-    dbgs() << "emitPushReg StackOffset: " << StackOffset << "\n"; //ggout
+    //dbgs() << "emitPushReg StackOffset: " << StackOffset << "\n"; //ggout
 }
 
 void emitPopReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, const MCPhysReg Reg)
@@ -40,7 +40,7 @@ void emitPopReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, const MCP
 
     BuildMI(MBB, I, DebugLoc(), TII.get(X86::POP64r)).addReg(Reg);
     StackOffset += 8;
-    dbgs() << "emitPushReg StackOffset: " << StackOffset << "\n"; //ggout
+    //dbgs() << "emitPushReg StackOffset: " << StackOffset << "\n"; //ggout
 }
 
 void emitPushContextRegs(MachineBasicBlock &MBB, MachineBasicBlock::iterator I)
@@ -58,7 +58,7 @@ void emitPushContextRegs(MachineBasicBlock &MBB, MachineBasicBlock::iterator I)
     BuildMI(MBB, I, DebugLoc(), TII.get(X86::PUSH64r)).addReg(X86::R10);
     BuildMI(MBB, I, DebugLoc(), TII.get(X86::PUSH64r)).addReg(X86::R11);
     StackOffset -= (8*8);
-    dbgs() << "emitPushCtx StackOffset: " << StackOffset << "\n"; //ggout
+    //dbgs() << "emitPushCtx StackOffset: " << StackOffset << "\n"; //ggout
 
 }
 
@@ -77,7 +77,7 @@ void emitPopContextRegs(MachineBasicBlock &MBB, MachineBasicBlock::iterator I)
     BuildMI(MBB, I, DebugLoc(), TII.get(X86::POP64r)).addReg(X86::RSI);
 
     StackOffset += (8*8);
-    dbgs() << "emitPopCtx StackOffset: " << StackOffset << "\n"; //ggout
+    //dbgs() << "emitPopCtx StackOffset: " << StackOffset << "\n"; //ggout
 }
 
 void emitAlignStack16B(MachineBasicBlock &MBB, MachineBasicBlock::iterator I)
@@ -147,7 +147,7 @@ int64_t emitAllocateStackAlign16B(MachineBasicBlock &MBB, MachineBasicBlock::ite
     addRegOffset(BuildMI(MBB, I, DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, -AlignedStackSize);
 
     StackOffset -= AlignedStackSize;
-    dbgs() << "emitAllocStack StackOffset: " << StackOffset << "\n"; //ggout
+    //dbgs() << "emitAllocStack StackOffset: " << StackOffset << "\n"; //ggout
 
     return AlignedStackSize;
 }
@@ -161,7 +161,7 @@ void emitDeallocateStack(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, 
     addRegOffset(BuildMI(MBB, I, DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, size);
 
     StackOffset += size;
-    dbgs() << "emitFreeStack StackOffset: " << StackOffset << "\n"; //ggout
+    //dbgs() << "emitFreeStack StackOffset: " << StackOffset << "\n"; //ggout
 }
 
 void X86FaultInjection::injectMachineBasicBlock(
@@ -192,10 +192,10 @@ void X86FaultInjection::injectMachineBasicBlock(
     {
         emitPushContextRegs( SelMBB, SelMBB.end() );
         // PUSH RDI for selMBB arg1 (pointer stack, inject flag)
-        emitPushReg(SelMBB, SelMBB.end(), X86::RDI);
+        //emitPushReg(SelMBB, SelMBB.end(), X86::RDI); //ggtest
         // PUSH RSI for selMBB arg2 (value, number of instruction)
         //BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::PUSH64r)).addReg(X86::RSI);
-        emitPushReg(SelMBB, SelMBB.end(), X86::RSI);
+        //emitPushReg(SelMBB, SelMBB.end(), X86::RSI); //ggtest
 
         // MOV RSI <= MBB.size(), selMBB arg2 (uint64_t, number of instructions)
         BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::MOV64ri), X86::RSI).addImm(TargetInstrCount);
@@ -203,7 +203,7 @@ void X86FaultInjection::injectMachineBasicBlock(
         //addRegOffset(BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, -24);
         // Allocate stack space for out arg1
         int64_t AlignedStackSize = emitAllocateStackAlign16B(SelMBB, SelMBB.end(), 8 );
-        dbgs() << "AlignedStackSize:" << AlignedStackSize << "\n"; //ggout
+        //dbgs() << "AlignedStackSize:" << AlignedStackSize << "\n"; //ggout
         // MOV RDI <= RSP, selMBB arg1
         addRegOffset(BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RDI), X86::RSP, false, 0);
         int64_t RetOffset = StackOffset;
@@ -214,11 +214,11 @@ void X86FaultInjection::injectMachineBasicBlock(
         BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::CALL64pcrel32)).addOperand( MO );
 
         // TEST for jump (see code later), XXX: THIS SETS FLAGS FOR THE JMP, be careful not to mess with them until the branch
-        addDirectMem(BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::TEST8mi)), X86::RDI).addImm(0x2);
+        addDirectMem(BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::TEST8mi)), X86::RSP).addImm(0x2); // ggtest
 
         emitDeallocateStack( SelMBB, SelMBB.end(), AlignedStackSize );
-        emitPopReg(SelMBB, SelMBB.end(), X86::RSI);
-        emitPopReg(SelMBB, SelMBB.end(), X86::RDI);
+        //emitPopReg(SelMBB, SelMBB.end(), X86::RSI); //ggtest
+        //emitPopReg(SelMBB, SelMBB.end(), X86::RDI); //ggtest
         emitPopContextRegs( SelMBB, SelMBB.end() );
 
         SmallVector<MachineOperand, 1> Cond;
@@ -270,8 +270,8 @@ void X86FaultInjection::injectMachineBasicBlock(
         }
     }
 
-    dbgs() << "StackOffset:" << StackOffset << "\n"; //ggout
-    assert(StackOffset == 0 && "StackOffset must be 0\n"); //ggout ggin
+    //dbgs() << "StackOffset:" << StackOffset << "\n"; //ggout
+    assert(StackOffset == 0 && "StackOffset must be 0\n");
     //assert(false && "CHECK!\n");
 }
 
@@ -325,11 +325,11 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
 
         // PUSH RDI for selInst arg1 (pointer stack, inject flag)
         //BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::PUSH64r)).addReg(X86::RDI);
-        emitPushReg( InstSelMBB, InstSelMBB.end(), X86::RDI );
+        //emitPushReg( InstSelMBB, InstSelMBB.end(), X86::RDI ); //ggtest
 #ifdef INSTR_PRINT
         // PUSH RSI for selInst arg2 (uint8_t *, instr_str)
         //BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::PUSH64r)).addReg(X86::RSI);
-        emitPushReg( InstSelMBB, InstSelMBB.end(), X86::RSI );
+        //emitPushReg( InstSelMBB, InstSelMBB.end(), X86::RSI ); //ggtest
         std::string instr_str;
         llvm::raw_string_ostream rso(instr_str);
         //MI.print(rso, true); //skip operands
@@ -364,14 +364,14 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
         BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::CALL64pcrel32)).addOperand( MO );
 
         // TEST for jump (see code later), XXX: THIS SETS FLAGS FOR THE JMP, be careful not to mess with them until the branch
-        addDirectMem(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::TEST8mi)), X86::RDI).addImm(0x1);
+        addDirectMem(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::TEST8mi)), X86::RSP).addImm(0x1); //ggtest
 
         emitDeallocateStack( InstSelMBB, InstSelMBB.end(), AlignedStackSize );
 #ifdef INSTR_PRINT
-        emitPopReg( InstSelMBB, InstSelMBB.end(), X86::RSI );
+        //emitPopReg( InstSelMBB, InstSelMBB.end(), X86::RSI ); //ggtest
 #endif
         // POP RDI
-        emitPopReg( InstSelMBB, InstSelMBB.end(), X86::RDI );
+        //emitPopReg( InstSelMBB, InstSelMBB.end(), X86::RDI ); //ggtest
 
         emitPopContextRegs( InstSelMBB, InstSelMBB.end() );
 
@@ -391,13 +391,13 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
     emitPushContextRegs( PreFIMBB, PreFIMBB.end() );
 
     // PUSH RDI for doInject arg1 (unsigned, number of ops)
-    emitPushReg( PreFIMBB, PreFIMBB.end(), X86::RDI );
+    //emitPushReg( PreFIMBB, PreFIMBB.end(), X86::RDI ); //ggtest
     // PUSH RSI for doInject arg2 (uint64_t *, &op)
-    emitPushReg( PreFIMBB, PreFIMBB.end(), X86::RSI );
+    //emitPushReg( PreFIMBB, PreFIMBB.end(), X86::RSI ); //ggtest
     // PUSH RDX for doInject arg3 (uint64_t *, &size)
-    emitPushReg( PreFIMBB, PreFIMBB.end(), X86::RDX );
+    //emitPushReg( PreFIMBB, PreFIMBB.end(), X86::RDX ); //ggtest
     // PUSH RCX for doInject arg4 (uint64_t *, bitmask)
-    emitPushReg( PreFIMBB, PreFIMBB.end(), X86::RCX );
+    //emitPushReg( PreFIMBB, PreFIMBB.end(), X86::RCX ); //ggtest
 
     // The size and number of pointer arguments other than the bitmask
     unsigned PointerDataSize = 8;
@@ -438,13 +438,13 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
     //addRegOffset(BuildMI(PreFIMBB, PreFIMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, AlignedStackSpace);
     emitDeallocateStack( PreFIMBB, PreFIMBB.end(), AlignedStackSize );
     // POP RCX
-    emitPopReg( PreFIMBB, PreFIMBB.end(), X86::RCX );
+    //emitPopReg( PreFIMBB, PreFIMBB.end(), X86::RCX ); //ggtest
     // POP RDX
-    emitPopReg( PreFIMBB, PreFIMBB.end(), X86::RDX );
+    //emitPopReg( PreFIMBB, PreFIMBB.end(), X86::RDX ); //ggtest
     // POP RSI
-    emitPopReg( PreFIMBB, PreFIMBB.end(), X86::RSI );
+    //emitPopReg( PreFIMBB, PreFIMBB.end(), X86::RSI ); //ggtest
     // POP RDI
-    emitPopReg( PreFIMBB, PreFIMBB.end(), X86::RDI );
+    //emitPopReg( PreFIMBB, PreFIMBB.end(), X86::RDI ); //ggtest
 
     emitPopContextRegs( PreFIMBB, PreFIMBB.end() );
 
