@@ -351,8 +351,6 @@ namespace {
     void instrumentInstructionsInMachineBasicBlock(
         SmallVector< std::pair< MachineInstr *, SmallVector<MachineOperand *, 4> >, 32> &vecFIInstr,
         MachineFunction &MF) {
-      //TODO: fix no operand discovery
-      //for(auto MI : vecFIInstr.first) {
       for(auto I : vecFIInstr) {
         MachineInstr *MI = I.first;
         SmallVector<MachineOperand *, 4> &EligibleOps = I.second;
