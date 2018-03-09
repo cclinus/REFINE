@@ -39,7 +39,7 @@ VOID injectReg(THREADID tid, VOID *ip, UINT64 idx, UINT32 op, REG reg, CONTEXT *
     if ( fi_iterator[tid].v > fi_index ) {
         // XXX: emulated detach
         //detach = true;
-        PIN_Detach();
+        //PIN_Detach();
         //printf("DETACH thread=%d fi_thread %d fi_iterator %" PRIu64 "\n", tid, fi_thread, fi_iterator[tid].v);
         return;
     }
@@ -53,37 +53,25 @@ VOID injectReg(THREADID tid, VOID *ip, UINT64 idx, UINT32 op, REG reg, CONTEXT *
 
         fi_output_fstream.open(injection_file.Value().c_str(), std::fstream::out);
         assert(fi_output_fstream.is_open() && "Cannot open injection output file\n");
-        fi_output_fstream << "thread=" << tid << ", fi_index=" << fi_iterator[tid].v << ", fi_instr_index=" << idx << ", op=" << op
-            << ", reg=" << REG_StringShort(reg) << ", bitflip=" << fi_bit_flip << ", addr=" << hexstr(ip) << std::endl;
+
+        fi_output_fstream << "thread=" << tid << ", fi_index=" << fi_iterator[tid].v << ", op=" << op << ", size=" << REG_Size(reg)
+            << ", bitflip=" << fi_bit_flip << ", fi_instr_index=" << idx << ", reg=" << REG_StringShort(reg) << ", addr=" << hexstr(ip) << std::endl;
+
         fi_output_fstream.close();
     }
 
-    fi_bit_flip=12;//105; //ggout
-
-    cerr << "INJECT fi_index=" << fi_iterator[tid].v << ", fi_instr_index=" << idx << ", op=" << op
-        << ", reg=" << REG_StringShort(reg) << ", bitflip=" << fi_bit_flip << ", addr=" << hexstr(ip) << std::endl;
+    /*cerr << "INJECT fi_index=" << fi_iterator[tid].v << ", fi_instr_index=" << idx << ", op=" << op
+        << ", reg=" << REG_StringShort(reg) << ", bitflip=" << fi_bit_flip << ", addr=" << hexstr(ip) << std::endl;*/
 
     UINT32 inject_byte = fi_bit_flip/8;
     UINT32 inject_bit = fi_bit_flip%8;
 
-#ifdef VERBOSE
-    LOG("Instruction:" + ptrstr(ip) +", reg " + REG_StringShort(reg) + ", val ");
-    for(UINT32 i = 0; i<REG_Size(reg); i++)
-        LOG(hexstr(val->byte[i]) + " ");
-#endif
 
     PIN_REGISTER val;
     PIN_GetContextRegval(ctx, reg, val.byte);
     //val->byte[inject_byte] = (val->byte[inject_byte] ^ (1U << inject_bit));
     val.byte[inject_byte] = (val.byte[inject_byte] ^ (1U << inject_bit));
     PIN_SetContextRegval(ctx, reg, val.byte);
-
-#ifdef VERBOSE
-    LOG(" bitflip:" + decstr(fi_bit_flip) +", reg " + REG_StringShort(reg) + ", val ");
-    for(UINT32 i = 0; i<REG_Size(reg); i++)
-        LOG(hexstr(val->byte[i]) + " ");
-    LOG("\n");
-#endif
 }
 
 // Memory injection is work-in-progress
@@ -229,11 +217,17 @@ VOID InstrumentIns(INS ins, VOID *v) {
         else
             IPoint = IPOINT_AFTER;
 
+        ASSERTX(IPoint == IPOINT_AFTER && "It should always be after!\n");
         // XXX: Use IARG_PARTIAL_CONTEXT instead of IARG_REG_REFERENCE because
         // some registers are unavailable from the latter
         REGSET regsIn, regsOut;
+        REGSET_Clear(regsIn);
+        REGSET_Clear(regsOut);
         REGSET_Insert(regsIn, reg);
         REGSET_Insert(regsOut, reg);
+        // XXX: Adding super registers as well, otherwise Pin may complain
+        REGSET_Insert(regsIn, REG_FullRegName(reg) );
+        REGSET_Insert(regsOut, REG_FullRegName(reg) );
         INS_InsertCall(ins, IPoint, AFUNPTR(injectReg),
                 IARG_THREAD_ID,
                 IARG_ADDRINT, INS_Address(ins),
@@ -301,18 +295,19 @@ VOID ThreadStart(THREADID tid, CONTEXT *ctx, INT32 flags, VOID *v)
 VOID Init()
 {
     FILE *fp;
-    if( ( fp = fopen(injection_file.Value().c_str(), "r") ) != NULL) {
+    /*if( ( fp = fopen(injection_file.Value().c_str(), "r") ) != NULL) {
         cerr << "REPRODUCE FI" << endl;
         assert(false && "Reproducing experiments is work-in-progress for parallel programs\n");
 
-        int ret = fscanf(fp, "fi_index=%"PRIu64", fi_instr_index=%"PRIu64", op=%u, reg=%*[a-z0-9], bitflip=%u, addr=%*x\n", &fi_index, &fi_instr_index, &fi_op, &fi_bit_flip);
+        //int ret = fscanf(fp, "fi_index=%"PRIu64", fi_instr_index=%"PRIu64", op=%u, reg=%*[a-z0-9], bitflip=%u, addr=%*x\n", &fi_index, &fi_instr_index, &fi_op, &fi_bit_flip);
+        int ret = fscanf(fp, "fi_index=%"PRIu64", op=%u, size=%*u, bitflip=%u, fi_instr_index=%"PRIu64, &fi_index, &fi_op, &fi_bit_flip, &fi_instr_index);
         fprintf(stderr, "fi_index=%"PRIu64", fi_instr_index=%"PRIu64", op=%u, bitflip=%u\n", fi_index, fi_instr_index, fi_op, fi_bit_flip);
         assert(ret == 4 && "fscanf failed!\n");
         action = DO_REPRODUCE;
         assert(fi_index > 0 && "fi_index <= 0!\n");
         assert(fi_instr_index > 0 && "fi_instr_index <= 0!\n");
     }
-    else if( (fp = fopen(target_file.Value().c_str(), "r") ) != NULL) {
+    else */if( (fp = fopen(target_file.Value().c_str(), "r") ) != NULL) {
         int ret = fscanf(fp, "thread=%d, fi_index=%"PRIu64"\n", &fi_thread, &fi_index);
         cerr << "TARGET fi_thread=" << fi_thread << ", fi_index=" << fi_index <<" RANDOM INJECTION" << endl;
         assert(ret == 2 && "fscanf failed!\n");

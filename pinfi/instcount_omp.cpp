@@ -74,6 +74,7 @@ VOID Fini(INT32 code, VOID *v)
     OutFile << "thread=" << i << ", fi_index=" << fi_iterator[i].v << endl;
     sum += fi_iterator[i].v;
   }
+  OutFile << "fi_index=" << sum << endl;
   OutFile.close();
 
   //cerr << "Sum: " << sum << " -- atomic: " << fi_iterator_atomic << "\n";

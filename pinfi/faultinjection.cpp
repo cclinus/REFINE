@@ -1,6 +1,5 @@
 #include "faultinjection.h"
 #include <string.h>
-#include <assert.h>
 #include <stdio.h>
 #include "pin.H"
 
@@ -15,10 +14,11 @@
 // XXX: instr_iterator is global, *NOT* per thread, static instrumentation
 static UINT64 instr_iterator = 0;
 static UINT64 fi_iterator = 0;
+
 // XXX: emulate detach
 //static bool detach = false;
 
-VOID injectReg(VOID *ip, UINT64 idx, UINT32 op, REG reg, PIN_REGISTER *val)
+VOID injectReg(VOID *ip, UINT64 idx, UINT32 op, REG reg, CONTEXT *ctx)
 {
     // XXX: emulate detach
     /*if(detach)
@@ -35,10 +35,9 @@ VOID injectReg(VOID *ip, UINT64 idx, UINT32 op, REG reg, PIN_REGISTER *val)
         // XXX: One fault per run, thus remove instr. and detach to speedup execution
         // This can be changed to allow multiple errors
         //cerr << "PIN_Detach!\n"; //ggout
-        PIN_Detach();
+        //PIN_Detach(); //ggout ggin
         // XXX: emulate detach
-        /*detach = true;
-        PIN_RemoveInstrumentation();*/
+        //detach = true;
         return;
     }
 
@@ -47,32 +46,23 @@ VOID injectReg(VOID *ip, UINT64 idx, UINT32 op, REG reg, PIN_REGISTER *val)
         fi_bit_flip = genrand64_int64()%size_bits;
 
         fi_output_fstream.open(injection_file.Value().c_str(), std::fstream::out);
-        assert(fi_output_fstream.is_open() && "Cannot open injection output file\n");
-        fi_output_fstream << "fi_index=" << fi_iterator << ", fi_instr_index=" << idx << ", op=" << op
-            << ", reg=" << REG_StringShort(reg) << ", bitflip=" << fi_bit_flip << ", addr=" << hexstr(ip) << std::endl;
+        ASSERTX(fi_output_fstream.is_open() && "Cannot open injection output file\n");
+        fi_output_fstream << "fi_index=" << fi_iterator << ", op=" << op << ", size=" << REG_Size(reg)
+            << ", bitflip=" << fi_bit_flip << ", fi_instr_index=" << idx << ", reg=" << REG_StringShort(reg) << ", addr=" << hexstr(ip) << std::endl;
         fi_output_fstream.close();
     }
-
-    cerr << "INJECT fi_index=" << fi_iterator << ", fi_instr_index=" << idx << ", op=" << op
-            << ", reg=" << REG_StringShort(reg) << ", bitflip=" << fi_bit_flip << ", addr=" << hexstr(ip) << std::endl;
+    
+    /*cerr << "fi_index=" << fi_iterator << ", op=" << op << ", size=" << REG_Size(reg)
+        << ", bitflip=" << fi_bit_flip << ", fi_instr_index=" << idx << ", reg=" << REG_StringShort(reg) << ", addr=" << hexstr(ip) << std::endl;*/
 
     UINT32 inject_byte = fi_bit_flip/8;
     UINT32 inject_bit = fi_bit_flip%8;
 
-#ifdef VERBOSE
-    LOG("Instruction:" + ptrstr(ip) +", reg " + REG_StringShort(reg) + ", val ");
-    for(UINT32 i = 0; i<REG_Size(reg); i++)
-        LOG(hexstr(val->byte[i]) + " ");
-#endif
+    PIN_REGISTER val;
+    PIN_GetContextRegval(ctx, reg, val.byte);
 
-    val->byte[inject_byte] = (val->byte[inject_byte] ^ (1U << inject_bit));
-
-#ifdef VERBOSE
-    LOG(" bitflip:" + decstr(fi_bit_flip) +", reg " + REG_StringShort(reg) + ", val ");
-    for(UINT32 i = 0; i<REG_Size(reg); i++)
-        LOG(hexstr(val->byte[i]) + " ");
-    LOG("\n");
-#endif
+    val.byte[inject_byte] = (val.byte[inject_byte] ^ (1U << inject_bit));
+    PIN_SetContextRegval(ctx, reg, val.byte);
 }
 
 // Memory injection is work-in-progress
@@ -99,7 +89,7 @@ VOID inject_Mem(VOID *ip) {
     }
 #endif
 
-    assert(ip == g_ip && "Analyze ip unequal to inject ip!\n");
+    ASSERTX(ip == g_ip && "Analyze ip unequal to inject ip!\n");
     UINT8 *p = (UINT8 *) g_mem_addr;
 #ifdef VERBOSE
     LOG("Instruction: " + ptrstr(ip) +", memory " + ptrstr(g_mem_addr) + ", ");
@@ -191,7 +181,7 @@ VOID InstrumentIns(INS ins, VOID *v) {
     LOG("\n");
 #endif
 
-    assert((numOps > 0) && "No ops to FI!\n");
+    ASSERTX((numOps > 0) && "No ops to FI!\n");
 
     UINT32 op;
     if(action == DO_RANDOM)
@@ -200,7 +190,6 @@ VOID InstrumentIns(INS ins, VOID *v) {
         //cerr << "instr_iterator: " << instr_iterator <<" , fi_instr_index: " << fi_instr_index << "\n"; //ggout
         if(instr_iterator == fi_instr_index) {
             op = fi_op;
-            //cerr << "setting op=" << op << "\n"; //ggout
         }
         else
             op = 0; // 0 is always valid
@@ -209,7 +198,7 @@ VOID InstrumentIns(INS ins, VOID *v) {
     if(FI_Ops[op].type == REG_DST || FI_Ops[op].type == REG_SRC) {
         reg = FI_Ops[op].reg;
 #ifdef VERBOSE
-        LOG("FI instrumentation at: " + REG_StringShort(reg) + ", " + (FI_Ops[op].type == REG_SRC?"SRC":"DST") + "\n");
+        LOG("FI instrumentation at: " + StringFromUint64(instr_iterator) + ", op: " + StringFromUint64(op) + ", reg: " + REG_StringShort(reg) + ", " + (FI_Ops[op].type == REG_SRC?"SRC":"DST") + "\n");
 #endif
 
         IPOINT IPoint;
@@ -218,12 +207,21 @@ VOID InstrumentIns(INS ins, VOID *v) {
         else
             IPoint = IPOINT_AFTER;
 
+        ASSERTX(IPoint == IPOINT_AFTER && "It should always be after!\n");
+        REGSET regsIn, regsOut;
+        REGSET_Clear(regsIn);
+        REGSET_Clear(regsOut);
+        REGSET_Insert(regsIn, reg);
+        REGSET_Insert(regsOut, reg);
+        // XXX: Adding super registers as well, otherwise Pin may complain
+        REGSET_Insert(regsIn, REG_FullRegName(reg) );
+        REGSET_Insert(regsOut, REG_FullRegName(reg) );
         INS_InsertCall(ins, IPoint, AFUNPTR(injectReg),
                 IARG_ADDRINT, INS_Address(ins),
                 IARG_UINT64, instr_iterator,
                 IARG_UINT32, op,
                 IARG_UINT32, reg,
-                IARG_REG_REFERENCE, reg,
+                IARG_PARTIAL_CONTEXT, &regsIn, &regsOut,
                 IARG_END);
     }
     // Inject to MEM
@@ -231,7 +229,7 @@ VOID InstrumentIns(INS ins, VOID *v) {
     // XXX: Address can be resolved only at IPOINT_BEFORE. Split fault injection: 1) analyze to
     // get the address and size, and 2) injecton happens at the next instruction (if possible)
     else if(FI_Ops[op].type == MEM_DST) {
-        assert(false && "should never be here\n");
+        ASSERTX(false && "should never be here\n");
         // XXX: CALL instructions modify the stack: PUSH(IP). However they are considered non-fall 
         // through. Hence, they have no next instruction and FI is not possible
         if(INS_Next(ins) != INS_Invalid()) {
@@ -252,7 +250,7 @@ VOID InstrumentIns(INS ins, VOID *v) {
     }
 #endif
     else
-        assert(false && "FI type is invalid!\n");
+        ASSERTX(false && "FI type is invalid!\n");
 
 #ifdef VERBOSE
     LOG("==============\n");
@@ -264,6 +262,7 @@ VOID InstrumentTrace(TRACE trace, VOID *v)
 {
     // XXX: emulate detach
     /*if(detach)
+        //PIN_Detach();
         return;*/
 
     if(isValidTrace(trace))
@@ -278,26 +277,27 @@ VOID InstrumentTrace(TRACE trace, VOID *v)
 VOID Init()
 {
     FILE *fp;
-    if( ( fp = fopen(injection_file.Value().c_str(), "r") ) != NULL) {
+    /*if( ( fp = fopen(injection_file.Value().c_str(), "r") ) != NULL) {
         cerr << "REPRODUCE FI" << endl;
-        assert(false && "Reproducing experiments is work-in-progress for parallel programs\n");
+        ASSERTX(false && "Reproducing experiments is work-in-progress for parallel programs\n");
 
-        int ret = fscanf(fp, "fi_index=%"PRIu64", fi_instr_index=%"PRIu64", op=%u, reg=%*[a-z0-9], bitflip=%u, addr=%*x\n", &fi_index, &fi_instr_index, &fi_op, &fi_bit_flip);
-        fprintf(stderr, "fi_index=%"PRIu64", fi_instr_index=%"PRIu64", op=%u, bitflip=%u\n", fi_index, fi_instr_index, fi_op, fi_bit_flip);
-        assert(ret == 4 && "fscanf failed!\n");
+        //int ret = fscanf(fp, "fi_index=%"PRIu64", fi_instr_index=%"PRIu64", op=%u, reg=%*[a-z0-9], bitflip=%u, addr=%*x\n", &fi_index, &fi_instr_index, &fi_op, &fi_bit_flip);
+        int ret = fscanf(fp, "fi_index=%"PRIu64", op=%u, size=%*u, bitflip=%u, fi_instr_index=%"PRIu64, &fi_index, &fi_op, &fi_bit_flip, &fi_instr_index);
+        fprintf(stderr, "fi_index=%"PRIu64", op=%u, bitflip=%u\n", fi_index, fi_op, fi_bit_flip);
+        ASSERTX(ret == 4 && "fscanf failed!\n");
         action = DO_REPRODUCE;
-        assert(fi_index > 0 && "fi_index <= 0!\n");
-        assert(fi_instr_index > 0 && "fi_instr_index <= 0!\n");
+        ASSERTX(fi_index > 0 && "fi_index <= 0!\n");
+        ASSERTX(fi_instr_index > 0 && "fi_instr_index <= 0!\n");
     }
-    else if( (fp = fopen(target_file.Value().c_str(), "r") ) != NULL) {
+    else*/ if( (fp = fopen(target_file.Value().c_str(), "r") ) != NULL) {
         int ret = fscanf(fp, "fi_index=%"PRIu64"\n", &fi_index);
         cerr << "TARGET fi_index=" << fi_index <<" RANDOM INJECTION" << endl;
-        assert(ret == 1 && "fscanf failed!\n");
+        ASSERTX(ret == 1 && "fscanf failed!\n");
         action = DO_RANDOM;
-        assert(fi_index > 0 && "fi_index <= 0!\n");
+        ASSERTX(fi_index > 0 && "fi_index <= 0!\n");
     }
     else {
-        assert(false && "PINFI needs either a target or injection file\n");
+        ASSERTX(false && "PINFI needs either a target or injection file\n");
     }
 
     fclose(fp);
