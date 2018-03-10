@@ -24,7 +24,7 @@ using namespace llvm;
 int RSPOffset = 0, RBPOffset = -8, RAXOffset = -16;
 int StackOffset = 0;
 
-int64_t emitAllocateStackAlign16B(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, int64_t size)
+int64_t emitAllocateStackAlign(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, int64_t size, int64_t Alignment)
 {
     MachineFunction &MF = *MBB.getParent();
     const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
@@ -32,7 +32,7 @@ int64_t emitAllocateStackAlign16B(MachineBasicBlock &MBB, MachineBasicBlock::ite
     int64_t Offset = -StackOffset;
     Offset += size;
 
-    int64_t AlignedStackSize = size + ( (Offset%16) > 0 ? (16 - (Offset%16)) : 0 );
+    int64_t AlignedStackSize = size + ( (Offset%Alignment) > 0 ? (Alignment - (Offset%Alignment)) : 0 );
 
     addRegOffset(BuildMI(MBB, I, DebugLoc(), TII.get(X86::LEA64r), X86::RSP), X86::RSP, false, -AlignedStackSize);
 
@@ -76,17 +76,15 @@ void emitPopReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, const MCP
     //dbgs() << "emitPushReg StackOffset: " << StackOffset << "\n"; //ggout
 }
 
-void emitPushContextRegList(std::vector<MCPhysReg> &saveRegs, MachineBasicBlock &MBB, MachineBasicBlock::iterator I)
+void emitPushContextRegList(std::vector<MCPhysReg> &saveRegs, MachineBasicBlock &MBB, MachineBasicBlock::iterator I, int64_t Alignment)
 {
-    //XXX: Assumens 16B stack aligned
+    //XXX: Assumes stack has been pre-aligned
 
     // XXX: Push context, dynamic linker doesn't preserve volatile regs
     MachineFunction &MF = *MBB.getParent();
     const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
     const MachineRegisterInfo &MRI = MF.getRegInfo();
     const TargetRegisterInfo &TRI = *MRI.getTargetRegisterInfo();
-    const X86Subtarget &Subtarget = MF.getSubtarget<X86Subtarget>();
-    bool HasAVX = Subtarget.hasAVX();
 
     int64_t RegStackSize = 0; 
 
@@ -99,28 +97,42 @@ void emitPushContextRegList(std::vector<MCPhysReg> &saveRegs, MachineBasicBlock 
                     RegStackSize += 16;
                     break;
                 case 32:
-                    dbgs() << PrintReg(Reg, &TRI) << "\n";
-                    assert(false && "Unsupported 512-bit register");
+                    RegStackSize += 32;
+                    break;
+                case 64:
+                    RegStackSize += 64;
+                    //dbgs() << PrintReg(Reg, &TRI) << "\n";
+                    //assert(false && "Unsupported 512-bit register");
+                    break;
             }
         }
     }
 
-    emitAllocateStackAlign16B( MBB, I, RegStackSize );
-    
-    int RegStackOffset = 0;
-    // emit store instructions
-    for(MCPhysReg Reg : saveRegs) {
-        if( ! X86::GR64RegClass.contains(Reg) ) {
-            unsigned OpCode;
-            const TargetRegisterClass *TRC = TRI.getMinimalPhysRegClass(Reg);
-            switch( TRC->getSize() ) {
-                case 16:
-                    OpCode = (HasAVX ? X86::VMOVAPSmr : X86::MOVAPSmr);
-                    addRegOffset(BuildMI(MBB, I, DebugLoc(), TII.get(OpCode)), X86::RSP, false, RegStackOffset).addReg(Reg);
-                    RegStackOffset += 16;
-                    break;
-                case 32:
-                    assert(false && "Unsupported 512-bit register");
+    if(RegStackSize) {
+        emitAllocateStackAlign( MBB, I, RegStackSize, Alignment);
+
+        int RegStackOffset = 0;
+        // emit store instructions
+        for(MCPhysReg Reg : saveRegs) {
+            if( ! X86::GR64RegClass.contains(Reg) ) {
+                const TargetRegisterClass *TRC = TRI.getMinimalPhysRegClass(Reg);
+                switch( TRC->getSize() ) {
+                    case 16:
+                        addRegOffset(BuildMI(MBB, I, DebugLoc(), TII.get( X86::MOVAPSmr )), X86::RSP, false, RegStackOffset).addReg(Reg);
+                        RegStackOffset += 16;
+                        break;
+                    case 32:
+                        addRegOffset(BuildMI(MBB, I, DebugLoc(), TII.get(X86::VMOVAPSYmr)), X86::RSP, false, RegStackOffset).addReg(Reg);
+                        RegStackOffset += 32;
+                        break;
+                    case 64:
+                        addRegOffset(BuildMI(MBB, I, DebugLoc(), TII.get(X86::VMOVAPSZmr)), X86::RSP, false, RegStackOffset).addReg(Reg);
+                        RegStackOffset += 64;
+                        break;
+                        //return load ? X86::VMOVAPSZrm : X86::VMOVAPSZmr;
+                        //dbgs() << PrintReg(Reg, &TRI) << "\n";
+                        //assert(false && "Unsupported 512-bit register");
+                }
             }
         }
     }
@@ -134,14 +146,12 @@ void emitPushContextRegList(std::vector<MCPhysReg> &saveRegs, MachineBasicBlock 
     }
     //dbgs() << "emitPushCtx StackOffset: " << StackOffset << "\n"; //ggout
 }
-void emitPopContextRegList(std::vector<MCPhysReg> &saveRegs, MachineBasicBlock &MBB, MachineBasicBlock::iterator I)
+void emitPopContextRegList(std::vector<MCPhysReg> &saveRegs, MachineBasicBlock &MBB, MachineBasicBlock::iterator I, int Alignment)
 {
     MachineFunction &MF = *MBB.getParent();
     const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
     const MachineRegisterInfo &MRI = MF.getRegInfo();
     const TargetRegisterInfo &TRI = *MRI.getTargetRegisterInfo();
-    const X86Subtarget &Subtarget = MF.getSubtarget<X86Subtarget>();
-    bool HasAVX = Subtarget.hasAVX();
 
     // load GR64 registers -- note reverse order
     for( auto it = saveRegs.rbegin(); it != saveRegs.rend(); it++ ) {
@@ -163,41 +173,58 @@ void emitPopContextRegList(std::vector<MCPhysReg> &saveRegs, MachineBasicBlock &
                     RegStackSize += 16;
                     break;
                 case 32:
-                    assert(false && "Unsupported 512-bit register");
-            }
-        }
-    }
-
-    int RegStackOffset = 0;
-    // emit load instructions -- note original order, restoring with MOV does not change the stack
-    for( MCPhysReg Reg : saveRegs ) {
-        if( ! X86::GR64RegClass.contains(Reg) ) {
-            unsigned OpCode;
-            const TargetRegisterClass *TRC = TRI.getMinimalPhysRegClass(Reg);
-            switch( TRC->getSize() ) {
-                case 16:
-                    OpCode = (HasAVX ? X86::VMOVAPSrm : X86::MOVAPSrm);
-                    addRegOffset(BuildMI(MBB, I, DebugLoc(), TII.get(OpCode), Reg), X86::RSP, false, RegStackOffset);
-                    RegStackOffset += 16;
+                    RegStackSize += 32;
                     break;
-                case 32:
-                    assert(false && "Unsupported 512-bit register");
+                case 64:
+                    RegStackSize += 64;
+                    break;
+                    //dbgs() << PrintReg(Reg, &TRI) << "\n";
+                    //assert(false && "Unsupported 512-bit register");
             }
         }
     }
 
-    emitDeallocateStack( MBB, I, RegStackSize );
-    
+    if(RegStackSize) {
+        int RegStackOffset = 0;
+        // emit load instructions -- note original order, restoring with MOV does not change the stack
+        for( MCPhysReg Reg : saveRegs ) {
+            if( ! X86::GR64RegClass.contains(Reg) ) {
+                const TargetRegisterClass *TRC = TRI.getMinimalPhysRegClass(Reg);
+                switch( TRC->getSize() ) {
+                    case 16:
+                        addRegOffset(BuildMI(MBB, I, DebugLoc(), TII.get( X86::MOVAPSrm ), Reg), X86::RSP, false, RegStackOffset);
+                        RegStackOffset += 16;
+                        break;
+                    case 32:
+                        addRegOffset(BuildMI(MBB, I, DebugLoc(), TII.get( X86::VMOVAPSYrm ), Reg), X86::RSP, false, RegStackOffset);
+                        RegStackOffset += 32;
+                        break;
+                    case 64:
+                        addRegOffset(BuildMI(MBB, I, DebugLoc(), TII.get( X86::VMOVAPSZrm ), Reg), X86::RSP, false, RegStackOffset);
+                        RegStackOffset += 64;
+                        break;
+                        //return load ? X86::VMOVAPSZrm : X86::VMOVAPSZmr;
+                        //dbgs() << PrintReg(Reg, &TRI) << "\n";
+                        //assert(false && "Unsupported 512-bit register");
+                }
+            }
+        }
+
+        // Align RegStackSize before subtracting
+        RegStackSize += ( (RegStackSize%Alignment) > 0 ? (Alignment - (RegStackSize%Alignment)) : 0 );
+        emitDeallocateStack( MBB, I, RegStackSize );
+    }
+
     //dbgs() << "emitPushCtx StackOffset: " << StackOffset << "\n"; //ggout
 }
 
-void emitAlignStack16B(MachineBasicBlock &MBB, MachineBasicBlock::iterator I)
+void emitAlignStack(MachineBasicBlock &MBB, MachineBasicBlock::iterator I, int64_t Alignment)
 {
     // Save frame registers (RSP, RBP, RAX), use RBP for addressing RSPOffset, RBPOffset, RAXOffset
     MachineFunction &MF = *MBB.getParent();
     const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
 
-    BuildMI(MBB, I, DebugLoc(), TII.get(X86::AND64ri8), X86::RSP).addReg(X86::RSP).addImm(-16);
+    BuildMI(MBB, I, DebugLoc(), TII.get(X86::AND64ri8), X86::RSP).addReg(X86::RSP).addImm(-Alignment);
 }
 
 void emitSaveFrameFlags(MachineBasicBlock &MBB, MachineBasicBlock::iterator I)
@@ -248,11 +275,21 @@ void emitRestoreFrameFlags(MachineBasicBlock &MBB, MachineBasicBlock::iterator I
 // Fill saveRegs with LiveRegs
 void fillSaveRegs(std::vector<MCPhysReg> &saveRegs, LivePhysRegs &LiveRegs, const TargetRegisterInfo *TRI)
 {
-    /*dbgs() << "==== LIVEREGS ===\n";
-    LiveRegs.dump();*/
+    dbgs() << "==== LIVEREGS ===\n";
+    LiveRegs.dump();
     // Remove subregs
     for(MCPhysReg Reg : LiveRegs) {
         MCPhysReg SReg64 = Reg;
+        /*bool ContainsSuperReg = false;
+        for (MCSuperRegIterator SReg(Reg, TRI); SReg.isValid(); ++SReg) {
+            if (LiveRegs.contains(*SReg)) {
+                ContainsSuperReg = true;
+                break;
+            }
+        }
+        if (ContainsSuperReg)
+            continue;*/
+
         for (MCSuperRegIterator SReg(Reg, TRI, true); SReg.isValid(); ++SReg) {
             if( X86::GR64RegClass.contains(*SReg) ) {
                 SReg64 = *SReg;
@@ -263,23 +300,23 @@ void fillSaveRegs(std::vector<MCPhysReg> &saveRegs, LivePhysRegs &LiveRegs, cons
 
         // Skip registers that we save already or don't need saving (CSR registers)
         if(! (SReg64 == X86::RIP || SReg64 == X86::RSP || SReg64 == X86::RBP || SReg64 == X86::RAX || SReg64 == X86::EFLAGS ||
-              SReg64 == X86::RBX || SReg64 == X86::R12 || SReg64 == X86::R13 || SReg64 == X86::R14 || SReg64 == X86::R15 ) )
+                    SReg64 == X86::RBX || SReg64 == X86::R12 || SReg64 == X86::R13 || SReg64 == X86::R14 || SReg64 == X86::R15 ) )
             if( std::find(saveRegs.begin(), saveRegs.end(), SReg64) == saveRegs.end() )
                 saveRegs.push_back(SReg64);
     }
 
-    // XXX: store from larger size to smaller, avoid re-aligning the 16B-aligned stack for vector registers
+    // XXX: store from larger size to smaller to avoid re-aligning the stack
     std::sort( saveRegs.begin(), saveRegs.end(), 
             [TRI](MCPhysReg a, MCPhysReg b) { 
             const TargetRegisterClass *TRC_a = TRI->getMinimalPhysRegClass(a);
             const TargetRegisterClass *TRC_b = TRI->getMinimalPhysRegClass(b);
             return (TRC_a->getSize() > TRC_b->getSize());
             } );
-    /*dbgs() << "RegList:  ";
+    dbgs() << "RegList:  ";
     for (auto i: saveRegs)
         dbgs() << PrintReg(i, TRI) << ' ';
     dbgs() << "\n";
-    dbgs() << "==== END LIVEREGS ===\n";*/
+    dbgs() << "==== END LIVEREGS ===\n";
 }
 
 void X86FaultInjection::injectMachineBasicBlock(
@@ -309,10 +346,10 @@ void X86FaultInjection::injectMachineBasicBlock(
     saveRegs.push_back(X86::RAX);
     saveRegs.push_back(X86::RDI);
     saveRegs.push_back(X86::RSI);
-    //dbgs() << "==== SELMBB ====\n";
+    dbgs() << "==== SELMBB ====\n";
     //SelMBB.dump();
     fillSaveRegs(saveRegs, LiveRegs, &TRI);
-    //dbgs() << "==== END SELMBB ====\n";
+    dbgs() << "==== END SELMBB ====\n";
 
     /* ============================================================= CREATE SelMBB ========================================================== */
 
@@ -320,20 +357,24 @@ void X86FaultInjection::injectMachineBasicBlock(
         emitSaveFrameFlags( SelMBB, SelMBB.end() );
     }
 
-    // XXX: Stack must be 16-byte aligned before calling a function. We don't know what's the alignment
-    // before the call, so we do a double push scheme of RSP to align and restore it. Plus, PXOR for FI 
-    // needs memory 16-byte aligned too. Align SP on a 16-byte boundary
+    // XXX: Align the stack on a 64-byte boundary. We don't know alignment on entry,
+    // hence we force it to the largest register. 
+    // This solves three problems:
+    // 1. Calling a function needs 16B alignment, 64B covers that
+    // 2. Vector registers when pushing the context, largest are ZMM 64B
+    // 3. PXOR for FI on vector registers (largest ZMM) is faster 
+    // The original RSP is saved in RBP and restored in emitRestoreFrameFlags
     {
-        emitAlignStack16B( SelMBB, SelMBB.end() );
+        emitAlignStack( SelMBB, SelMBB.end(), 64);
     }
 
     {
-        emitPushContextRegList( saveRegs, SelMBB, SelMBB.end() );
+        emitPushContextRegList( saveRegs, SelMBB, SelMBB.end(), 64 );
 
         // MOV RSI <= MBB.size(), selMBB arg2 (uint64_t, number of instructions)
         BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::MOV64ri), X86::RSI).addImm(TargetInstrCount);
         // Allocate stack space for out arg1
-        int64_t AlignedStackSize = emitAllocateStackAlign16B(SelMBB, SelMBB.end(), 8 );
+        int64_t AlignedStackSize = emitAllocateStackAlign(SelMBB, SelMBB.end(), 8, 64 );
         //dbgs() << "AlignedStackSize:" << AlignedStackSize << "\n"; //ggout
         // MOV RDI <= RSP, selMBB arg1
         addRegOffset(BuildMI(SelMBB, SelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RDI), X86::RSP, false, 0);
@@ -349,7 +390,7 @@ void X86FaultInjection::injectMachineBasicBlock(
 
         emitDeallocateStack( SelMBB, SelMBB.end(), AlignedStackSize );
 
-        emitPopContextRegList( saveRegs, SelMBB, SelMBB.end() );
+        emitPopContextRegList( saveRegs, SelMBB, SelMBB.end(), 64 );
 
         SmallVector<MachineOperand, 1> Cond;
         Cond.push_back(MachineOperand::CreateImm(X86::COND_NE));
@@ -468,15 +509,13 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
         emitSaveFrameFlags( InstSelMBB, InstSelMBB.end() );
     }
 
-    // XXX: Stack must be 16-byte aligned before calling a function. We don't know what's the alignment
-    // before the call, so we do a double push scheme of RSP to align and restore it. Plus, PXOR for FI 
-    // needs memory 16-byte aligned too. Align SP on a 16-byte boundary
+    // XXX: Align stack on 64B, see earlier comment
     {
-        emitAlignStack16B( InstSelMBB, InstSelMBB.end() );
+        emitAlignStack( InstSelMBB, InstSelMBB.end(), 64 );
     }
 
     {
-        emitPushContextRegList( saveRegs, InstSelMBB, InstSelMBB.end() );
+        emitPushContextRegList( saveRegs, InstSelMBB, InstSelMBB.end(), 64 );
 
 #ifdef INSTR_PRINT
         std::string instr_str;
@@ -492,7 +531,7 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
         // out arg1
         int64_t size = 8;
 #endif
-        int64_t AlignedStackSize = emitAllocateStackAlign16B( InstSelMBB, InstSelMBB.end(), size );
+        int64_t AlignedStackSize = emitAllocateStackAlign( InstSelMBB, InstSelMBB.end(), size, 64 );
         // MOV RDI <= RSP, selInst out arg1
         addRegOffset(BuildMI(InstSelMBB, InstSelMBB.end(), DebugLoc(), TII.get(X86::LEA64r), X86::RDI), X86::RSP, false, 0);
 #ifdef INSTR_PRINT
@@ -517,7 +556,7 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
 
         emitDeallocateStack( InstSelMBB, InstSelMBB.end(), AlignedStackSize );
 
-        emitPopContextRegList( saveRegs, InstSelMBB, InstSelMBB.end() );
+        emitPopContextRegList( saveRegs, InstSelMBB, InstSelMBB.end(), 64 );
 
         SmallVector<MachineOperand, 1> Cond;
         Cond.push_back(MachineOperand::CreateImm(X86::COND_E));
@@ -532,7 +571,7 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
 
     // SystemV x64 calling conventions, args: RDI, RSI, RDX, RCX, R8, R9, XMM0-7, RTL
 
-    emitPushContextRegList( saveRegs, PreFIMBB, PreFIMBB.end() );
+    emitPushContextRegList( saveRegs, PreFIMBB, PreFIMBB.end(), 64 );
 
     // The size and number of pointer arguments other than the bitmask
     unsigned PointerDataSize = 8;
@@ -540,7 +579,7 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
     // TODO: Reduce stack space, ops, size array fit in uint16_t types
     // XXX: Align to 16-bytes
     int64_t size = (PointerDataSize + FIRegs.size() * PointerDataSize + MaxRegSize);
-    int64_t AlignedStackSize = emitAllocateStackAlign16B( PreFIMBB, PreFIMBB.end(), size );
+    int64_t AlignedStackSize = emitAllocateStackAlign( PreFIMBB, PreFIMBB.end(), size, 64 );
     // MOV RDI <= FIRegs.size(), doInject arg1 (uint64_t, number of ops)
     BuildMI(PreFIMBB, PreFIMBB.end(), DebugLoc(), TII.get(X86::MOV64ri), X86::RDI).addImm(FIRegs.size());
     // LEA RSI <= &op, doInject arg2 (uint64_t *, &op, 8B)
@@ -572,7 +611,7 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
     // POP doInject arg2, arg3, ar4
     emitDeallocateStack( PreFIMBB, PreFIMBB.end(), AlignedStackSize );
 
-    emitPopContextRegList( saveRegs, PreFIMBB, PreFIMBB.end() );
+    emitPopContextRegList( saveRegs, PreFIMBB, PreFIMBB.end(), 64 );
 
     PreFIMBB.addSuccessor(OpSelMBBs.front()); 
     TII.InsertBranch(PreFIMBB, OpSelMBBs.front(), nullptr, None, DebugLoc());
