@@ -15,6 +15,7 @@ using namespace llvm;
 /* TODO: 
  * 1. Optimize the FI process in general
  *    a. Don't spill after InstSelMBB, FI in context
+ *    b. Reduce alignment depending on spilled regs
  */
 
 // XXX: slowdown for storing string
@@ -275,12 +276,11 @@ void emitRestoreFrameFlags(MachineBasicBlock &MBB, MachineBasicBlock::iterator I
 // Fill saveRegs with LiveRegs
 void fillSaveRegs(std::vector<MCPhysReg> &saveRegs, LivePhysRegs &LiveRegs, const TargetRegisterInfo *TRI)
 {
-    dbgs() << "==== LIVEREGS ===\n";
-    LiveRegs.dump();
+    //dbgs() << "==== LIVEREGS ===\n";
+    //LiveRegs.dump();
     // Remove subregs
     for(MCPhysReg Reg : LiveRegs) {
-        MCPhysReg SReg64 = Reg;
-        /*bool ContainsSuperReg = false;
+        bool ContainsSuperReg = false;
         for (MCSuperRegIterator SReg(Reg, TRI); SReg.isValid(); ++SReg) {
             if (LiveRegs.contains(*SReg)) {
                 ContainsSuperReg = true;
@@ -288,8 +288,9 @@ void fillSaveRegs(std::vector<MCPhysReg> &saveRegs, LivePhysRegs &LiveRegs, cons
             }
         }
         if (ContainsSuperReg)
-            continue;*/
+            continue;
 
+        MCPhysReg SReg64 = Reg;
         for (MCSuperRegIterator SReg(Reg, TRI, true); SReg.isValid(); ++SReg) {
             if( X86::GR64RegClass.contains(*SReg) ) {
                 SReg64 = *SReg;
@@ -312,11 +313,11 @@ void fillSaveRegs(std::vector<MCPhysReg> &saveRegs, LivePhysRegs &LiveRegs, cons
             const TargetRegisterClass *TRC_b = TRI->getMinimalPhysRegClass(b);
             return (TRC_a->getSize() > TRC_b->getSize());
             } );
-    dbgs() << "RegList:  ";
+    /*dbgs() << "RegList:  ";
     for (auto i: saveRegs)
         dbgs() << PrintReg(i, TRI) << ' ';
     dbgs() << "\n";
-    dbgs() << "==== END LIVEREGS ===\n";
+    dbgs() << "==== END LIVEREGS ===\n";*/
 }
 
 void X86FaultInjection::injectMachineBasicBlock(
@@ -346,10 +347,10 @@ void X86FaultInjection::injectMachineBasicBlock(
     saveRegs.push_back(X86::RAX);
     saveRegs.push_back(X86::RDI);
     saveRegs.push_back(X86::RSI);
-    dbgs() << "==== SELMBB ====\n";
+    //dbgs() << "==== SELMBB ====\n";
     //SelMBB.dump();
     fillSaveRegs(saveRegs, LiveRegs, &TRI);
-    dbgs() << "==== END SELMBB ====\n";
+    //dbgs() << "==== END SELMBB ====\n";
 
     /* ============================================================= CREATE SelMBB ========================================================== */
 
@@ -652,7 +653,6 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
         // is later copied to FIReg, if needed.
         unsigned ProxyFIReg = FIReg;
 
-        // TODO: Test for 256-bit and 512-bit vector registers
         if(RegSizeBits <= 32) {
             // If it's one of the workhorse registers, used a different register as a proxy
             if(TRI.getSubRegIndex(X86::RSP, FIReg) || TRI.getSubRegIndex(X86::RBP, FIReg) || TRI.getSubRegIndex(X86::RAX, FIReg)) {
@@ -731,8 +731,32 @@ void X86FaultInjection::injectFault(MachineFunction &MF,
                 BuildMI(FIMBB, FIMBB.end(), DebugLoc(), TII.get(X86::POP64r)).addReg(ProxyFIReg);
             }
         }
-        else if(RegSizeBits <= 128 || RegSizeBits <=256 || RegSizeBits <=512 ) {
+        // XMM registers
+        else if(RegSizeBits <= 128) {
             addRegOffset(BuildMI(FIMBB, FIMBB.end(), DebugLoc(), TII.get(X86::PXORrm), ProxyFIReg).addReg(ProxyFIReg), X86::RSP, false, BitmaskStackOffset);
+            /*std::string str;
+            llvm::raw_string_ostream rso(str);
+            MI2->print(rso);
+            dbgs() << "XMM " << PrintReg(FIReg, &TRI) << " MaxRegSize:" << MaxRegSize << " FIXOR: " << rso.str(); //ggout*/
+        }
+        // YMM registers
+        else if(RegSizeBits <= 256) {
+            
+            addRegOffset(BuildMI(FIMBB, FIMBB.end(), DebugLoc(), TII.get(X86::VXORPSYrm), ProxyFIReg).addReg(ProxyFIReg), X86::RSP, false, BitmaskStackOffset);
+            /*std::string str;
+            llvm::raw_string_ostream rso(str);
+            MI2->print(rso);
+            dbgs() << "YMM " << PrintReg(FIReg, &TRI) << " MaxRegSize:" << MaxRegSize << " FIXOR: " << rso.str(); //ggout*/
+
+        }
+        // ZMM registers
+        //TODO: CHECK!
+        else if(RegSizeBits <= 512) {
+            addRegOffset(BuildMI(FIMBB, FIMBB.end(), DebugLoc(), TII.get(X86::VXORPSZrm), ProxyFIReg).addReg(ProxyFIReg), X86::RSP, false, BitmaskStackOffset);
+            /*std::string str;
+            llvm::raw_string_ostream rso(str);
+            MI2->print(rso);
+            dbgs() << "ZMM " << PrintReg(FIReg, &TRI) << " MaxRegSize:" << MaxRegSize << " FIXOR: " << rso.str(); //ggout*/
         }
         else
             assert(false && "RegSizeBits is invalid!\n");

@@ -51,12 +51,17 @@
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/RandomNumberGenerator.h"
 
+#include <fstream>
+
 using namespace llvm;
 
 #define DEBUG_TYPE "mc-fi"
 
 cl::opt<bool>
 FIEnable("fi", cl::desc("Enable fault injection at the instruction level"), cl::init(false));
+
+cl::opt<bool>
+SaveInstrEnable("fi-save-instr", cl::desc("Save instrumentation log file: <module>-instrument.txt"), cl::init(false));
 
 cl::opt<bool>
 FILiveinsMBBEnable("fi-mbb-liveins", cl::desc("Enable fault injection at the livein registers of the MBB"), cl::init(false));
@@ -87,24 +92,35 @@ namespace {
       INJECT_AFTER
     };
 
-    int TotalInstrCount;
-    int TotalTargetInstrCount;
+    uint64_t TotalInstrCount;
+    uint64_t TotalTargetInstrCount;
+    std::ofstream InstrumentFile;
 
     Module *M;
   public:
     static char ID;
 
     MCFaultInjectionPass() : MachineFunctionPass(ID) {
+      dbgs() << "==== MCFAULTINJECTIONPASS ====\n"; //ggout
       TotalInstrCount = 0; TotalTargetInstrCount = 0;
+    }
+
+    ~MCFaultInjectionPass() {
+      dbgs() << "END TotalInstrCount: " << TotalInstrCount << ", TotalTargetInstrCount:" << TotalTargetInstrCount << "\n";
+      dbgs() << "==== END MCFAULTINJECTIONPASS ====\n"; //ggout
     }
 
     bool doInitialization(Module &M) override {
       this->M = &M;
+      if(SaveInstrEnable)
+        InstrumentFile.open((M.getName() + "-instrument.txt").str(), std::fstream::out);
       return false;
     }
 
     bool doFinalization(Module &M) override {
       //dbgs() << "MCFIPass finalize!" << "\n";
+      if(SaveInstrEnable)
+        InstrumentFile.close();
       return false;
     }
 
@@ -270,7 +286,8 @@ namespace {
       }
     }
 
-    std::tuple<uint64_t, uint64_t> findTargetInstructionsPair(SmallVector< std::pair< MachineInstr *, SmallVector<MachineOperand *, 4> >, 32> &vecFIInstr,
+    std::tuple<uint64_t, uint64_t> findTargetInstructionsPair(
+        SmallVector< std::pair< MachineInstr *, SmallVector<MachineOperand *, 4> >, 32> &vecFIInstr,
         MachineBasicBlock &MBB,
         bool doDataFI, bool doControlFI, bool doFrameFI, bool injectDstRegs, bool injectSrcRegs) {
 
@@ -285,9 +302,8 @@ namespace {
 
         if(!MI.isPseudo() && !MI.usesCustomInsertionHook()) {
           InstrCount++;
-          /*dbgs() << "COUNT ";
-            MI.dump(); */
-          //dbgs() << "MI name:" << TII.getName( MI.getOpcode() ) << "\n"; //ggout
+          //dbgs() << "==== FIND TARGET ====\n";
+          //MI.dump(); //ggout
 
           if(MI.isBranch() || MI.isCall() || MI.isReturn())
             isControl = true;
@@ -340,6 +356,10 @@ namespace {
           if(!EligibleOps.empty()) {
             vecFIInstr.push_back(std::make_pair(&MI, EligibleOps));
             TargetInstrCount++;
+            //dbgs() << "FOUND TARGET\n";
+          }
+          else {
+            //dbgs() << "skip no eligible ops\n";
           }
         }
       }
@@ -367,6 +387,10 @@ namespace {
     }
 
     bool runOnMachineFunction(MachineFunction &MF) override {
+
+      uint64_t FuncInstrCount = 0;
+      uint64_t FuncTargetInstrCount = 0;
+
       if(!FIEnable && !FILiveinsMBBEnable)
         return false;
 
@@ -623,13 +647,24 @@ namespace {
               SmallVector< std::pair< MachineInstr *, SmallVector< MachineOperand *, 4 > >, 32> vecFIInstr;
               uint64_t InstrCount;
               uint64_t TargetInstrCount;
-              // XXX: TODO: analyze CopyMBB before the updateTerminators()!
+              // XXX: Run again on the CopyMBB this same. Result is the same but on the copied instruction stream
+              // TODO: analyze CopyMBB before the updateTerminators()!
               std::tie( InstrCount, TargetInstrCount ) = findTargetInstructionsPair(vecFIInstr, *CopyMBB, doDataFI, doControlFI, doFrameFI, injectDstRegs, injectSrcRegs);
               // XXX: Note TotalInstrCount might not be the same in FF because not all blocks are considered
-              TotalInstrCount += InstrCount;
-              TotalTargetInstrCount += TargetInstrCount;
+              FuncInstrCount += InstrCount;
+              FuncTargetInstrCount += TargetInstrCount;
 
               assert(TargetInstrCount > 0 && "TargetInstrCount cannot be 0!\n"); //ggout ggin
+
+              if(SaveInstrEnable) {
+                for(auto I : vecFIInstr) {
+                  MachineInstr *MI = I.first;
+                  std::string str;
+                  llvm::raw_string_ostream rso(str);
+                  MI->print(rso);
+                  InstrumentFile << rso.str();
+                }
+              }
               // XXX: Note FF method may count less total instructions because it doesn't process MBBs with no Targets
               /*dbgs() << "=============================================\n";
               dbgs() << "MBB: " << MBB->getSymbol()->getName() << " InstrCount: " << InstrCount << ", TargetInstrCount:" << TargetInstrCount << "\n";
@@ -673,7 +708,7 @@ namespace {
           }
 
           dbgs() << "=============================================\n";
-          dbgs() << "MF: " << MF.getName() << " TotalInstrCount: " << TotalInstrCount << ", TotalTargetInstrCount:" << TotalTargetInstrCount << "\n";
+          dbgs() << "MF: " << MF.getName() << " FuncInstrCount: " << FuncInstrCount << ", FuncTargetInstrCount:" << FuncTargetInstrCount << "\n";
           dbgs() << "=============================================\n";
         }
         else {
@@ -689,8 +724,8 @@ namespace {
               std::tie( InstrCount, TargetInstrCount ) = findTargetInstructionsPair(vecFIInstr, *MBB, doDataFI, doControlFI, doFrameFI, injectDstRegs, injectSrcRegs);
               //dbgs() << "TargetInstrCount: " << TargetInstrCount << "\n"; //ggout
               //MBB->dump(); // ggout
-              TotalInstrCount += InstrCount;
-              TotalTargetInstrCount += TargetInstrCount;
+              FuncInstrCount += InstrCount;
+              FuncTargetInstrCount += TargetInstrCount;
 
               /*dbgs() << "=============================================\n";
               dbgs() << "MBB: " << MBB->getSymbol()->getName() << " InstrCount: " << InstrCount << ", TargetInstrCount:" << TargetInstrCount << "\n";
@@ -700,9 +735,12 @@ namespace {
             }
 
             dbgs() << "=============================================\n";
-            dbgs() << "MF: " << MF.getName() << " TotalInstrCount: " << TotalInstrCount << ", TotalTargetInstrCount:" << TotalTargetInstrCount << "\n";
+            dbgs() << "MF: " << MF.getName() << " FuncInstrCount: " << FuncInstrCount << ", FuncTargetInstrCount:" << FuncTargetInstrCount << "\n";
             dbgs() << "=============================================\n";
         }
+
+        TotalInstrCount += FuncInstrCount;
+        TotalTargetInstrCount += FuncTargetInstrCount;
       }
 
       return true;
