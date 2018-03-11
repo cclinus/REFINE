@@ -59,4 +59,6 @@ miniFE_info.hpp
 .depend
 .depend.bak
 results*.txt
+compile-out.txt
+compile-err.txt
 
