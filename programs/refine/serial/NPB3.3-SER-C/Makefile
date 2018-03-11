@@ -65,7 +65,6 @@ veryclean: clean
 	- rm -f bin/ep.* bin/cg.* bin/ua.* bin/dc.*
 
 header:
-	mkdir -p bin
 	@ sys/print_header
 
 

@@ -16,7 +16,8 @@ MINIFE_MATRIX_TYPE = -DMINIFE_CSR_MATRIX
 
 #-----------------------------------------------------------------------
 
-CFLAGS = -O3 -fopenmp
+CFLAGS = -O3 -fopenmp 
+#-mavx
 CXXFLAGS = $(CFLAGS)
 
 CPPFLAGS = -I. -I../utils -I../fem $(MINIFE_TYPES) $(MINIFE_MATRIX_TYPE) -DMINIFE_RESTRICT=__restrict__ -I $(HOME)/usr/local/include
@@ -24,8 +25,8 @@ CPPFLAGS = -I. -I../utils -I../fem $(MINIFE_TYPES) $(MINIFE_MATRIX_TYPE) -DMINIF
 LDFLAGS= -fopenmp
 LIBS=
 
-CXX=clang++
-CC=clang
+CXX=$(HOME)/usr/local/bin/clang++
+CC=$(HOME)/usr/local/bin/clang
 
 #-----------------------------------------------------------------------
 

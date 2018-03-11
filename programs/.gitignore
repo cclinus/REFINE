@@ -23,9 +23,9 @@ pin*txt
 # NAS specific
 *npbparams.h
 */*/NPB3.3-SER-C/sys/setparams
-*/*/NPB3.3-SER-C/bin/*
+*/*/NPB3.3-SER-C/bin/*.x
 */*/NPB3.3-OMP-C/sys/setparams
-*/*/NPB3.3-OMP-C/bin/*
+*/*/NPB3.3-OMP-C/bin/*.x
 
 # CoMD specific
 */*/CoMD/bin/*

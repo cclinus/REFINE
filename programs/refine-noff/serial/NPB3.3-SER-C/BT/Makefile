@@ -11,7 +11,7 @@ OBJS = bt.o  initialize.o exact_solution.o exact_rhs.o \
        set_constants.o adi.o  rhs.o      \
        x_solve$(VEC).o y_solve$(VEC).o solve_subs.o  \
        z_solve$(VEC).o add.o error.o verify.o \
-       ${COMMON}/print_results.o ${COMMON}/c_timers.o ${COMMON}/wtime.o
+       ${COMMON}/print_results.o ${COMMON}/c_timers.o ${COMMON}/wtime.o ${COMMON}/doInject.o
 
 
 # npbparams.h is included by header.h

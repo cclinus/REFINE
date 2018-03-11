@@ -78,10 +78,7 @@ FLINKFLAGS = -O3 -mcmodel=medium
 #---------------------------------------------------------------------------
 # This is the C compiler used for C programs
 #---------------------------------------------------------------------------
-#CC = /usr/bin/clang
 CC = $(HOME)/usr/local/bin/clang
-#CC = $(LLFI_BUILD_ROOT)/llvm/bin/clang
-#CC = gcc
 
 #---------------------------------------------------------------------------
 # This links C programs; usually the same as ${CC}
@@ -113,14 +110,13 @@ C_INC = -I../common
 # _LARGEFILE64_SOURCE - are standard compiler flags which allow to work with 
 # files larger than 2GB.
 #---------------------------------------------------------------------------
-CFLAGS	= -g -Wall -O3 
-#CFLAGS	= -g -Wall -O3 
+CFLAGS	= -g -Wall -O3 -mcmodel=medium
 
 #---------------------------------------------------------------------------
 # Global *link time* flags. Flags for increasing maximum executable 
 # size usually go here. 
 #---------------------------------------------------------------------------
-CLINKFLAGS = -O3 -mcmodel=medium -v
+CLINKFLAGS = -O3 -mcmodel=medium
 
 
 #---------------------------------------------------------------------------
@@ -130,7 +126,6 @@ CLINKFLAGS = -O3 -mcmodel=medium -v
 # this compiler go here also; typically there are few flags required; hence 
 # there are no separate macros provided for such flags.
 #---------------------------------------------------------------------------
-UCFLAGS	= -g -Wall -O3 
 UCC	= gcc
 
 

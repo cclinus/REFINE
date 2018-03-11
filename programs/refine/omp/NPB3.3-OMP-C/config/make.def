@@ -75,7 +75,7 @@ FLINKFLAGS = -O3 -fopenmp -mcmodel=medium
 #---------------------------------------------------------------------------
 # This is the C compiler used for C programs
 #---------------------------------------------------------------------------
-CC = clang
+CC = $(HOME)/usr/local/bin/clang
 # This links C programs; usually the same as ${CC}
 CLINK	= $(CC)
 

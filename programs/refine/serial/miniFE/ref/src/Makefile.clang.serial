@@ -19,8 +19,8 @@ CPPFLAGS = -I. -I../utils -I../fem $(MINIFE_TYPES) \
 LDFLAGS =
 LIBS=-lm -linject_ser
 
-CXX=clang++
-CC=clang
+CXX=$(HOME)/usr/local/bin/clang++
+CC=$(HOME)/usr/local/bin/clang
 
 include make_targets
 

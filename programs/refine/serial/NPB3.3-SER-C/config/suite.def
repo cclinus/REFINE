@@ -11,22 +11,62 @@
 # No blank lines. 
 # The following example builds serial sample sizes of all benchmarks. 
 
+ep S
 ep W
+ep A
+ep B
+ep C
 
+is S
 is W
+is A
+is B
+is C
 
+cg S
 cg W
+cg A
+cg B
+cg C
 
+mg S
 mg W
+mg A
+mg B
+mg C
 
-bt W
-
-sp W
-
+ft S
 ft W
+ft A
+ft B
+ft C
 
+sp S
+sp W
+sp A
+sp B
+sp C
+
+bt S
+bt W
+bt A
+bt B
+bt C
+
+lu S
 lu W
+lu A
+lu B
+lu C
 
+dc S
 dc W
+dc A
+dc B
+dc C
 
+ua S
 ua W
+ua A
+ua B
+ua C

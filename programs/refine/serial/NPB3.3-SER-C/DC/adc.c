@@ -377,7 +377,7 @@ int CalculateVeiwSizes(ADC_PAR *par){
     fprintf(view,"Selection:");
     idx=dcview[i].vidx;
     for(j=0;j<dcdim;j++) 
-      if(((idx>>j)&0x1)==1) { fprintf(view," %lld",j+1); nViewDims++;}
+      if((idx>>j)&0x1==1) { fprintf(view," %lld",j+1); nViewDims++;}
     fprintf(view,"\nView Size: %lld\n",dcview[i].vsize);
 
     totalInBytes += (8+4*nViewDims)*dcview[i].vsize;

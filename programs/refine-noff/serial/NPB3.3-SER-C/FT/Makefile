@@ -8,7 +8,7 @@ include ../sys/make.common
 
 OBJS = appft.o auxfnct.o fft3d.o mainft.o verify.o \
        ${COMMON}/${RAND}.o ${COMMON}/print_results.o \
-       ${COMMON}/c_timers.o ${COMMON}/wtime.o
+       ${COMMON}/c_timers.o ${COMMON}/wtime.o ${COMMON}/doInject.o
 
 ${PROGRAM}: config ${OBJS}
 	${CLINK} ${CLINKFLAGS} -o ${PROGRAM} ${OBJS} ${C_LIB}

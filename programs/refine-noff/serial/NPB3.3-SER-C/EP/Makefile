@@ -10,7 +10,8 @@ OBJS = ep.o \
 			 ${COMMON}/print_results.o \
 			 ${COMMON}/${RAND}.o \
        ${COMMON}/c_timers.o \
-			 ${COMMON}/wtime.o
+			 ${COMMON}/wtime.o \
+			 ${COMMON}/doInject.o
 
 
 ${PROGRAM}: config ${OBJS}

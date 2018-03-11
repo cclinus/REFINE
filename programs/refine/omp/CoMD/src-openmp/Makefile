@@ -17,7 +17,7 @@ DO_MPI = OFF
 ### (such as -lm for the math library) put them in C_LIB.
 CC = $(HOME)/usr/local/bin/clang
 CFLAGS = -std=c99 -fopenmp -mllvm -fi -mllvm -fi-funcs="*" -mllvm -fi-inst-types="*" -mllvm -fi-reg-types=dst -mllvm -fi-ff
-#CFLAGS = -std=c99 -fopenmp
+
 OPTFLAGS = -g -O3
 INCLUDES = 
 C_LIB = -lm -linject_omp

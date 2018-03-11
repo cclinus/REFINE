@@ -1,1 +1,0 @@
-Makefile.clang.openmp
