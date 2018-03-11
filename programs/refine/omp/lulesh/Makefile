@@ -21,7 +21,7 @@ SOURCES2.0 = \
 OBJECTS2.0 = $(SOURCES2.0:.cc=.o)
 
 #Default build suggestions with OpenMP for g++
-CXXFLAGS = -g -O3 -I. -Wall -fopenmp -mllvm -fi -mllvm -fi-funcs="*" -mllvm -fi-inst-types="*" -mllvm -fi-reg-types=dst -mllvm -fi-ff
+CXXFLAGS = -g -O3 -I. -Wall -fopenmp -mllvm -fi -mllvm -fi-funcs="*" -mllvm -fi-inst-types="*" -mllvm -fi-reg-types=dst -mllvm -fi-ff -I $(HOME)/usr/local/include
 LDFLAGS = -g -O3 -fopenmp -linject_omp
 
 #Below are reasonable default flags for a serial build

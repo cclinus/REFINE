@@ -17,7 +17,7 @@ ${PROGRAM}: config ${OBJS}
 	${CLINK} ${CLINKFLAGS} -o ${PROGRAM} ${OBJS} ${C_LIB}
 
 .c.o:
-	${CCOMPILE} $<
+	${CCOMPILE} -mcmodel=medium $<
 
 mg.o:		mg.c globals.h npbparams.h
 

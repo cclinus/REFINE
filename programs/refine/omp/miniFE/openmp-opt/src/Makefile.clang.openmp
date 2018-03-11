@@ -16,7 +16,7 @@ MINIFE_MATRIX_TYPE = -DMINIFE_CSR_MATRIX
 
 #-----------------------------------------------------------------------
 
-CFLAGS = -O3 -fopenmp -mllvm -fi -mllvm -fi-funcs="*" -mllvm -fi-inst-types="*" -mllvm -fi-reg-types=dst -mllvm -fi-ff
+CFLAGS = -O3 -fopenmp -mllvm -fi -mllvm -fi-funcs="*" -mllvm -fi-inst-types="*" -mllvm -fi-reg-types=dst -mllvm -fi-ff -I $(HOME)/usr/local/include
 #-mavx
 CXXFLAGS = $(CFLAGS)
 
