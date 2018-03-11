@@ -13,6 +13,12 @@ import data
 import fi_tools
 
 try:
+    homedir = os.environ['HOME']
+except:
+    print('Env variable HOME is missing')
+    sys.exit(1)
+
+try:
     pinroot = os.environ['PIN_ROOT']
 except:
     print('Env variable PIN_ROOT is missing')
@@ -35,7 +41,7 @@ parser.add_argument('-w', '--workers', help='number of workers', type=int, requi
 parser.add_argument('-t', '--tool', help='tool to run', choices=['refine', 'pinfi', 'golden', 'refine-noff'], required=True)
 parser.add_argument('-x', '--action', help='action to take', choices=['profile', 'fi'], required=True)
 parser.add_argument('-a', '--apps', help='applications to run ( ' + ' | '.join(data.apps) + ' | ALL ) ', nargs='+', required=True)
-parser.add_argument('-c', '--config', help='execution configuration ( serial | omp <nthreads>)', nargs='+', required=True)
+parser.add_argument('-c', '--config', help='run configuration \n <serial | omp> <nthreads> [all | app | omplib])', nargs='+', required=True)
 parser.add_argument('-i', '--input', help='input size', choices=data.inputs, required=True)
 parser.add_argument('-s', '--start', help='start trial', type=int, required=True)
 parser.add_argument('-e', '--end', help='end trial', type=int, required=True)
@@ -53,15 +59,23 @@ else:
         assert a in data.apps, 'Application: ' + a + ' is invalid'
 assert args.start <= args.end, 'Start must be < end'
 assert args.config[0] in ['serial', 'omp']
-
 config = args.config[0]
 if config == 'omp':
-    assert len(args.config) == 2, 'Missing nthreads for omp config?'
-    nthreads = args.config[1]
-    assert int(nthreads) > 0
-else: 
-    assert len(args.config) == 1, 'Configuration serial has no arguments'
+    if args.tool == 'golden':
+        assert len(args.config) == 2, 'Golden config: omp <nthreads>'
+        nthreads = args.config[1]
+        assert int(nthreads) > 0, 'nthreads must be > 0'
+        instrument=''
+    else: # refine or pinfi
+        assert len(args.config) == 3, 'Config: omp <nthreads> <all | app | omplib>'
+        nthreads = args.config[1]
+        instrument = args.config[2]
+        assert int(nthreads) > 0, 'nthreads must be > 0'
+        assert instrument in ['all', 'app', 'omplib']
+else: # serial
+    assert len(args.config) == 1, 'Serial config has no other argument'
     nthreads = ''
+    instrument = ''
 
 def chunkify(lst, n):
     # Break in n chunks
@@ -105,6 +119,8 @@ def run_batch(exps):
     try:
         # Keeps time
         t = 1
+        avg_rate = 0
+        last_completed = 0
         while True:
             completed = 0
             total = len(exps)
@@ -121,7 +137,7 @@ def run_batch(exps):
             frac = completed/total
             full_progbar = 50
             filled_progbar = round(frac * full_progbar)
-            rate = round(completed/t, 2)
+            rate = round( avg_rate, 2 )
 
             m, s = divmod(t, 60)
             h, m = divmod(m, 60)
@@ -133,22 +149,25 @@ def run_batch(exps):
             else:
                 e_h = e_m = e_s = 0
 
-            print('\r','Status %4d / %4d'%(completed, total)
+            print('\r','Status %5d / %5d'%(completed, total)
                     , '#'*filled_progbar + '-'*(full_progbar - filled_progbar)
                     , '[{:>7.2%}]'.format(frac)
-                    , '| %2.2f exps/s'%(rate)
-                    , '| Elapsed time %2d:%02d:%02d' % (h, m, s)
-                    , '| Est. remaining time %3d:%02d:%02d' % (e_h, e_m, e_s)
+                    , '| %3.2f exps/s'%(rate)
+                    , '| Elapsed %2d:%02d:%02d' % (h, m, s)
+                    , '| Est. remaining %2d:%02d:%02d' % (e_h, e_m, e_s)
                     , end='')
             if completed >= total:
                 break
             time.sleep(1)
             t += 1
+            avg_rate = 0.25 * ( completed - last_completed ) + 0.75 * avg_rate
+            last_completed = completed
     except KeyboardInterrupt:
         for j in jobs:
             j['proc'].terminate()
     
-    print('\nRemoving log files...')
+    print( '\nTotal rate %3.2f exps/s'%( completed / t ) )
+    print('Removing log files...')
     # Remove log files
     for j in jobs:
         os.remove(j['jobid']+'.log')
@@ -156,14 +175,13 @@ def run_batch(exps):
 # Create fault injection experiment tuples
 exps = []
 for app in args.apps:
+    basedir = '%s/%s/%s/%s/%s/%s/%s/%s/'%(args.resdir, args.tool, config, app, args.action, instrument, nthreads, args.input)
+    print( 'Experiment: %s %s %s %s %s %s %s'%( args.tool, config, app, args.action, instrument, nthreads, args.input) )
     for trial in range(args.start, args.end+1):
-        print('Experiment: %s %s %s %s %s %s %s'%( args.tool, config, app, args.action, nthreads, args.input, trial ))
-        trialdir = '%s/%s/%s/%s/%s/%s/%s/%s/'%(args.resdir, args.tool, config, app, args.action, nthreads, args.input, trial)
-
-        print(trialdir)
+        trialdir = basedir + '/' + str(trial) +'/'
+        #print(trialdir)
         # Skip already done experiments
-        if os.path.isfile(trialdir+'ret.txt'):
-            print('Skip: %s %s %s %s %s %s %s'%( args.tool, config, app, args.action, nthreads, args.input, trial ))
+        if os.path.isfile(trialdir+'/ret.txt'):
             continue
 
         if args.action == 'profile':
@@ -173,8 +191,10 @@ for app in args.apps:
             timeout = 0
         elif args.action == 'fi':
             assert os.path.exists(trialdir), 'Trialdir %s does not exist, forgot to run generate-fi-samples?'%(trialdir)
+            assert not os.path.isfile(trialdir + '/'+ fi_tools.files[args.tool]['injection']),\
+            'Reproducible injection is not supported: ' + trialdir + '/' + fi_tools.files[args.tool]['injection']
             # get timeout
-            profiledir = '%s/%s/%s/%s/%s/%s/%s/'%(args.resdir, args.tool, config, app, 'profile', nthreads, args.input)
+            profiledir = '%s/%s/%s/%s/%s/%s/%s/%s'%(args.resdir, args.tool, config, app, 'profile', instrument, nthreads, args.input)
             fname = '/%s/mean_time.txt'%(profiledir)
             with open(fname, 'r') as f:
                 timeout = float( f.read() )
@@ -184,28 +204,53 @@ for app in args.apps:
         else:
             assert False, 'Invalid action:' + args.action
 
+        # Create executable
+        ## Find the program binary to run
         if args.tool == 'pinfi' or args.tool == 'golden':
             compiled = 'golden'
         elif args.tool == 'refine':
-            compiled = 'refine'
+            if instrument == 'omplib':
+                compiled = 'golden'
+            else:
+                compiled = 'refine'
         else:
             print('Unknown tool' + args.tool)
             sys.exit(1)
         rootdir = '%s/%s/%s/'%(args.appdir, compiled, config)
+
+        ## Build the exelist
+        ### Any tool specific exelist header
+        fi_exelist=[]
+        if args.tool in fi_tools.exelist:
+            if config == 'serial':
+                fi_exelist = fi_tools.exelist[args.tool][config][args.action]
+            else:
+                fi_exelist = fi_tools.exelist[args.tool][config][args.action][instrument]
+        #print(fi_exelist)
+
+        ### Patch APPDIR and NTHREADS if needed
         # XXX: replace $APPDIR, needed only for CoMD
         exelist = [ s.replace( '$APPDIR', '%s/%s'%(rootdir, app) ) for s in data.programs[config][app]['exec'][args.input] ]
-        # XXX: replace NTHREADS, needed only for XSBench
+        # XXX: replace NTHREADS, needed only for XSBench omp
         exelist = [ s.replace( '$NTHREADS', nthreads ) for s in exelist ]
-
         # XXX: note using rootdir, program binary in data is relative to that
-        exelist = fi_tools.exelist[args.tool][config][args.action] + [ rootdir + exelist[0] ] + exelist[1:]
+        exelist = fi_exelist + [ rootdir + exelist[0] ] + exelist[1:]
         exelist = ' '.join(exelist)
-        print('exelist< %s >'%(exelist))
-        if nthreads:
-            exps.append(['-e', 'OMP_NUM_THREADS', nthreads, '-r', trialdir, str(timeout), exelist])
-        else:
-            exps.append(['-r', trialdir, str(timeout), exelist])
+        #print('\nexelist< %s >\n'%(exelist))
 
+        ## Setup the env
+        runenv = []
+        if config == 'omp':
+            runenv += [ '-e', 'OMP_NUM_THREADS', nthreads ]
+        if args.tool == 'refine':
+            if instrument == 'all' or instrument == 'omplib':
+                runenv += [ '-e', 'LD_LIBRARY_PATH', homedir + '/usr/local/refine/lib:' + homedir + '/usr/local/lib' ]
+
+        ## Append to experiments (must be string list)
+        exps.append( runenv + ['-r', trialdir, str(timeout), exelist] )
+        print(runenv + ['-r', trialdir, str(timeout), exelist])
+        print(exelist)
+        #sys.exit(123)
 #print("==== experiments ====")
 #print(exps)
 #print("==== end experimetns ====")

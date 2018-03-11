@@ -25,7 +25,7 @@ FLOAT = r'[+-]?\d+\.\d+'
 programs = {
     'serial' : {
         'AMG' : {
-            'rundir':'AMG/test/', 'builddir':'AMG/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
+            'builddir':'AMG/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
             'exec' : {
                 'test'  : ['/AMG/test/amg', '-n', '32', '32', '32'],
                 'small' : ['/AMG/test/amg', '-n', '96', '96', '96'],
@@ -40,7 +40,7 @@ programs = {
         },
 
         'CoMD' : {
-            'rundir':'CoMD/', 'builddir':'CoMD'+'/src-mpi/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
+            'builddir':'CoMD'+'/src-mpi/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
             'exec' : {
                 # XXX: $APPDIR should be replaced by srun script
                 'test'  : ['/CoMD/bin/CoMD-serial', '-d', '$APPDIR/pots/', '-e', '-i', '1', '-j', '1', '-k', '1', '-x', '4', '-y', '4', '-z', '4'],
@@ -56,7 +56,7 @@ programs = {
         },
 
         'HPCCG-1.0' : {
-            'rundir':'HPCCG-1.0/', 'builddir':'HPCCG-1.0/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
+            'builddir':'HPCCG-1.0/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
             'exec' : {
                 'test' : ['HPCCG-1.0/test_HPCCG', '32', '32', '32'],
                 'small': ['HPCCG-1.0/test_HPCCG', '128', '128', '128'],
@@ -71,7 +71,7 @@ programs = {
         },
 
         'lulesh' : {
-            'rundir':'lulesh/', 'builddir':'lulesh/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
+            'builddir':'lulesh/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
             'exec' : {
                 'test'  : ['lulesh/lulesh2.0', '-i', '10'],
                 'small' : ['lulesh/lulesh2.0'],
@@ -86,7 +86,7 @@ programs = {
         },
         # XXX: XSBench needs the number of threads
         'XSBench' : {
-            'rundir':'XSBench/src/', 'builddir':'XSBench/src/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
+            'builddir':'XSBench/src/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
             'exec' : {
                 'test'  : ['/XSBench/src/XSBench','-s','small', '-l', '100000'],
                 'small' : ['/XSBench/src/XSBench','-s','small'],
@@ -101,7 +101,7 @@ programs = {
         },
 
         'miniFE' : {
-            'rundir':'miniFE/ref/src/', 'builddir':'miniFE/ref/src/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
+            'builddir':'miniFE/ref/src/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
             'exec' : {
                 'test'  : ['/miniFE/ref/src/miniFE.x','-nx','16','-ny','16','-nz','16'],
                 'small' : ['/miniFE/ref/src/miniFE.x','-nx','64','-ny','64','-nz','64'],
@@ -257,7 +257,7 @@ programs = {
     },
     'omp' : {
         'AMG' : {
-            'rundir':'AMG/test/', 'builddir':'AMG/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
+            'builddir':'AMG/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
             'exec' : {
                 'test'  : ['/AMG/test/amg', '-n', '32', '32', '32'],
                 'small' : ['/AMG/test/amg', '-n', '96', '96', '96'],
@@ -272,7 +272,7 @@ programs = {
         },
 
         'CoMD' : {
-            'rundir':'CoMD/', 'builddir':'CoMD'+'/src-openmp/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
+            'builddir':'CoMD'+'/src-openmp/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
             'exec' : {
                 # XXX: $RUNDIR should be replaced by srun script
                 'test'  : ['/CoMD/bin/CoMD-openmp', '-d', '$APPDIR/pots/', '-e', '-i', '1', '-j', '1', '-k', '1', '-x', '4', '-y', '4', '-z', '4'],
@@ -288,7 +288,7 @@ programs = {
         },
 
         'HPCCG-1.0' : {
-            'rundir':'HPCCG-1.0/', 'builddir':'HPCCG-1.0/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
+            'builddir':'HPCCG-1.0/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
             'exec' : {
                 'test'  : ['HPCCG-1.0/test_HPCCG', '32', '32', '32'],
                 'small' : ['HPCCG-1.0/test_HPCCG', '128', '128', '128'],
@@ -303,7 +303,7 @@ programs = {
         },
 
         'lulesh' : {
-            'rundir':'lulesh/', 'builddir':'lulesh/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
+            'builddir':'lulesh/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
             'exec' : {
                 'test'  : ['lulesh/lulesh2.0', '-i', '10'],
                 'small' : ['lulesh/lulesh2.0'],
@@ -318,7 +318,7 @@ programs = {
         },
         # XXX: XSBench needs the number of threads
         'XSBench' : {
-            'rundir':'XSBench/src/', 'builddir':'XSBench/src/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
+            'builddir':'XSBench/src/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
             'exec' : {
                 'test'  : ['/XSBench/src/XSBench','-s','small', '-l', '100000'],
                 'small' : ['/XSBench/src/XSBench','-s','small'],
@@ -333,7 +333,7 @@ programs = {
         },
 
         'miniFE' : {
-            'rundir':'miniFE/ref/src/', 'builddir':'miniFE/openmp-opt/src/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
+            'builddir':'miniFE/openmp-opt/src/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
             'exec' : {
                 'test'  : ['/miniFE/openmp-opt/src/miniFE.x','-nx','16','-ny','16','-nz','16'],
                 'small' : ['/miniFE/openmp-opt/src/miniFE.x','-nx','64','-ny','64','-nz','64'],

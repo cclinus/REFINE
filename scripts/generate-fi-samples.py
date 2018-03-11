@@ -13,15 +13,13 @@ from bashplotlib.histogram import plot_hist
 import data
 import fi_tools
 
-# Statistical FI
-FI_N_SAMPLES = 1068
-
 # Parse profiling data to get stats
 def parse_profile(basedir, tool, config, nthreads, input_size, start, end):
     inscount = []
-    thread_inscount = {}
-    for i in range(0, nthreads):
-        thread_inscount[i] = []
+    if config == 'omp':
+        thread_inscount = {}
+        for i in range(0, int(nthreads) ):
+            thread_inscount[i] = []
     xtime = []
 
     for trial in range(start, end+1):
@@ -46,12 +44,12 @@ def parse_profile(basedir, tool, config, nthreads, input_size, start, end):
         with open(fname, 'r') as f:
             xtime.append( float(f.read()) )
 
-    print( thread_inscount ) # ggout
     m_inscount = int(np.mean(inscount))
     s_inscount = np.std(inscount)
     m_thread_inscount = []
     if config == 'omp':
-        for i in range( 0, nthreads ):
+        print( thread_inscount ) # ggout
+        for i in range( 0, int(nthreads) ):
             m_thread_inscount.append( (i, int(np.mean( thread_inscount[i] ) )) )
     m_time = np.mean(xtime)
 
@@ -109,10 +107,11 @@ def main():
     parser.add_argument('-r', '--resdir', help='results directory', required=True)
     parser.add_argument('-t', '--tool', help='tool to run', choices=['refine', 'pinfi', 'refine-noff'], required=True)
     parser.add_argument('-a', '--apps', help='applications to run ( ' + ' | '.join(data.apps) + ' | ALL ) ', nargs='+', required=True)
-    parser.add_argument('-c', '--config', help='execution configuration ( serial | omp <nthreads>)', nargs='+', required=True)
+    parser.add_argument('-c', '--config', help='run configuration \n <serial | omp> <nthreads> [all | app | omplib])', nargs='+', required=True)
     parser.add_argument('-i', '--input', help='input size', choices=['test', 'small', 'large'], required=True)
-    parser.add_argument('-s', '--start', help='start trial', type=int, required=True)
-    parser.add_argument('-e', '--end', help='end trial', type=int, required=True)
+    parser.add_argument('-ps', '--pstart', help='profiling start', type=int, required=True)
+    parser.add_argument('-pe', '--pend', help='profilng end', type=int, required=True)
+    parser.add_argument('-n', '--nsamples', help='Number of FI samples', type=int, required=True)
     args = parser.parse_args()
 
     # Error checking
@@ -122,38 +121,45 @@ def main():
     else:
         for a in args.apps:
             assert a in data.apps, 'Application: ' + a + ' is invalid'
-    assert args.start <= args.end, 'Start must be < end'
+    assert args.pstart <= args.pend, 'Start must be < end'
     assert args.config[0] in ['serial', 'omp']
+
     config = args.config[0]
     if config == 'omp':
-        assert len(args.config) == 2, 'Missing nthreads for omp config?'
-        nthreads = int(args.config[1])
-        assert nthreads > 0
-    else: 
-        assert len(args.config) == 1, 'Configuration serial has no arguments'
-        nthreads = 0
-
-    rootdir = '%s/%s/%s/'%(args.resdir, args.tool, config)
+        if args.tool == 'golden':
+            assert len(args.config) == 2, 'Golden config: omp <nthreads>'
+            nthreads = args.config[1]
+            assert int(nthreads) > 0, 'nthreads must be > 0'
+            instrument=''
+        else: # refine or pinfi
+            assert len(args.config) == 3, 'Config: omp <nthreads> <all | app | omplib>'
+            nthreads = args.config[1]
+            instrument = args.config[2]
+            assert int(nthreads) > 0, 'nthreads must be > 0'
+            assert instrument in ['all', 'app', 'omplib']
+    else: # serial
+        assert len(args.config) == 1, 'Serial config has no other argument'
+        nthreads = ''
+        instrument = ''
+    assert args.nsamples > 0, 'Number of FI samples must be > 0'
+    
     # Generate random samples and fi files
     for app in args.apps:
-        if config == 'omp':
-            profiledir = '%s/%s/profile/%s/%s/'%(rootdir, app, nthreads, args.input)
-        else:
-            profiledir = '%s/%s/profile/%s/'%(rootdir, app, args.input)
+        profiledir = '%s/%s/%s/%s/%s/%s/%s/%s'%(args.resdir, args.tool, config, app, 'profile', instrument, nthreads, args.input)
 
-        m_time, m_inscount, s_inscount, m_thread_inscount = parse_profile(profiledir, args.tool, config, int(nthreads), args.input, args.start, args.end)
+        m_time, m_inscount, s_inscount, m_thread_inscount = parse_profile(profiledir, args.tool, config, nthreads, args.input, args.pstart, args.pend)
         print('mean inst. per thread')
         print(m_thread_inscount)
         print('mean inscount %d std %d'%(m_inscount, s_inscount) )
         print('mean time %.2f'%(m_time) )
 
         # create fi samples
-        samples = random.sample(range(1, m_inscount+1), FI_N_SAMPLES)
+        samples = random.sample(range(1, m_inscount+1), args.nsamples)
 
         # XXX replace profle -> fi
-        resultdir = profiledir.replace('profile', 'fi')
+        fidir = '%s/%s/%s/%s/%s/%s/%s/%s'%(args.resdir, args.tool, config, app, 'fi', instrument, nthreads, args.input)
         
-        write_fi_files(resultdir, args.tool, config, samples, m_thread_inscount)
+        write_fi_files(fidir, args.tool, config, samples, m_thread_inscount)
 
         samples = [n/m_inscount for n in samples]
         plot_hist(samples, title='Target distro', bincount=100, xlab=True)

@@ -63,15 +63,16 @@ def run(e):
     #print(exelist)
     #print('==== end before run ====')
 
-    newenv = os.environ.copy()
+    runenv = os.environ.copy()
     #newenv['LD_BIND_NOW'] = '1' # ggout ggin
     if args.env:
         for e in args.env:
-            newenv[e[0]] = e[1]
+            runenv[e[0]] = e[1]
+            #print('setting %s=%s'%(e[0], e[1]) ) # ggout
     start = time.perf_counter()
     try:
         #exelist = ['env']
-        p = subprocess.Popen(exelist, stdout=out_file, stderr=err_file, env=newenv, cwd=trialdir)
+        p = subprocess.Popen(exelist, stdout=out_file, stderr=err_file, env=runenv, cwd=trialdir)
         p.wait(timeout)
         #p = subprocess.run(exelist, stdout=out_file, stderr=err_file, timeout=timeout)
         #p = subprocess.run(exelist, stdout=out_file, stderr=subprocess.DEVNULL, timeout=timeout)

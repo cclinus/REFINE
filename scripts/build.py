@@ -9,8 +9,8 @@ import os
 import numpy as np
 
 def make(workdir, args):
-    out = open('compile-out.txt', 'w')
-    err = open('compile-err.txt', 'w')
+    out = open(workdir+'/compile-out.txt', 'w')
+    err = open(workdir+'/compile-err.txt', 'w')
     p = subprocess.Popen(['make'] + args, stdout = out, stderr = err, cwd = workdir)
     p.wait()
     if p.returncode == 0:
@@ -18,6 +18,8 @@ def make(workdir, args):
     else:
         print('make failed!')
         sys.exit(p.returncode)
+    out.close()
+    err.close()
 
 def clean(workdir):
     p = subprocess.Popen(['make', 'clean'], cwd = workdir, stdout = None)
@@ -54,7 +56,7 @@ tools = ['golden', 'pinfi', 'refine', 'refine-noff']
 parser = argparse.ArgumentParser('Build applications for tools and their configurations')
 # tuple of 3: (tool, app, iter)
 parser.add_argument('-d', '--appdir', help='application directory', required=True)
-parser.add_argument('-t', '--tools', help='tool to build ( golden | pinfi | refine | refine-noff )', nargs='+', required=True)
+parser.add_argument('-t', '--tools', help='tool to build ( golden | refine | refine-noff )', nargs='+', required=True)
 parser.add_argument('-c', '--configs', help='configuration to build ( serial | omp )', nargs='+', required=True)
 parser.add_argument('-a', '--apps', help='applications to build ( ' + ' | '.join(data.apps) + ' | ALL ) ', nargs='+', required=True)
 parser.add_argument('-i', '--inputs', help='inputs to build for (' + ' | '.join(data.inputs) + ' )', nargs='+', required=True)

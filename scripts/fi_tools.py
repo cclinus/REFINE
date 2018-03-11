@@ -39,43 +39,22 @@ files = {
     }
 
 exelist = {
-        # XXX: dummy for golden
-        'golden' : {
-            'serial' : {
-                'profile': []
-            },
-            'omp' : {
-                'profile': []
-            }
+    'pinfi':  {
+        'serial': {
+            'profile':[pinbin, '-t', pinfidir + '/obj-intel64/instcount', '-save-instr', '--'],
+            'fi'     :[pinbin, '-t', pinfidir + '/obj-intel64/faultinjection', '--'],
         },
-        'pinfi':  {
-            'serial': {
-                'profile': [pinbin, '-t', pinfidir + '/obj-intel64/instcount', '-save-instr', '--'],
-                'fi': [pinbin, '-t', pinfidir + '/obj-intel64/faultinjection', '--']
+        'omp': {
+           'profile': {
+                'all'   :[pinbin, '-t', pinfidir + '/obj-intel64/instcount_omp', '-save-instr', '-instr-libs', 'libomp', '--'],
+                'app'   :[pinbin, '-t', pinfidir + '/obj-intel64/instcount_omp', '-save-instr', '--'],
+                'omplib':[pinbin, '-t', pinfidir + '/obj-intel64/instcount_omp', '-save-instr', '-nomain', '-instr-libs', 'libomp', '--'],
             },
-            'omp': {
-                'profile': [pinbin, '-t', pinfidir + '/obj-intel64/instcount_omp', '-save-instr', '--'],
-                'fi': [pinbin, '-t', pinfidir + '/obj-intel64/faultinjection_omp', '--']
+            'fi': {
+                'all'   :[pinbin, '-t', pinfidir + '/obj-intel64/faultinjection_omp', '-instr-libs', 'libomp', '--'],
+                'app'   :[pinbin, '-t', pinfidir + '/obj-intel64/faultinjection_omp', '--'],
+                'omplib':[pinbin, '-t', pinfidir + '/obj-intel64/faultinjection_omp', '-nomain', '-instr-libs', 'libomp', '--']
             }
-        },
-        'refine': {
-            'serial': {
-                'profile': [],
-                'fi': []
-            },
-            'omp': {
-                'profile': [],
-                'fi': []
-            }
-        },
-        'refine-noff': {
-            'serial': {
-                'profile': [],
-                'fi': []
-            },
-            'omp': {
-                'profile': [],
-                'fi': []
-            },
         }
-    }
+    },
+}
