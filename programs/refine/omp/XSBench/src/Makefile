@@ -53,7 +53,7 @@ endif
 ifeq ($(COMPILER),clang)
   CC = $(HOME)/usr/local/bin/clang
 ifeq ($(OPENMP),yes)
-  CFLAGS += -fopenmp -DOPENMP
+  CFLAGS += -fopenmp -DOPENMP -I $(HOME)/usr/local/include
 endif
 endif
 

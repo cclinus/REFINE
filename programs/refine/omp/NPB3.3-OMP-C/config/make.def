@@ -87,7 +87,7 @@ C_LIB  = -lm -linject_omp
 #---------------------------------------------------------------------------
 # These macros are passed to the compiler 
 #---------------------------------------------------------------------------
-C_INC = -I../common
+C_INC = -I../common -I $(HOME)/usr/local/include
 
 #---------------------------------------------------------------------------
 # Global *compile time* flags for C programs
