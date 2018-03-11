@@ -25,7 +25,7 @@
 #CC = gcc
 #CC = mpicc
 #CC = mpixlc_r
-CC = clang
+CC = $(HOME)/usr/local/bin/clang
 
 # set compile flags here
 # MPI only:

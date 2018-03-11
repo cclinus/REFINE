@@ -51,7 +51,7 @@ endif
 
 # CLANG compiler
 ifeq ($(COMPILER),clang)
-  CC = clang
+  CC = $(HOME)/usr/local/bin/clang
 ifeq ($(OPENMP),yes)
   CFLAGS += -fopenmp -DOPENMP
 endif
