@@ -12,8 +12,8 @@
 #include <pthread.h>
 
 // TODO: preserve_all is too paranoid, should save at caller site needed registers
-void selInst(uint64_t *, uint8_t *) __attribute__((preserve_all));
-void doInject(unsigned , uint64_t *, uint64_t *, uint8_t *) __attribute__((preserve_all));
+void selInst(uint64_t *, uint8_t *);
+void doInject(unsigned , uint64_t *, uint64_t *, uint8_t *);
 void init() __attribute__((constructor));
 void fini() __attribute__((destructor));
 

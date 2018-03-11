@@ -12,9 +12,13 @@
 #include <pthread.h>
 
 // TODO: preserve_all is too paranoid, should save at caller site needed registers
+void selMBB(uint64_t *, uint64_t);
+void selInst(uint64_t *, uint8_t *);
+void doInject(unsigned , uint64_t *, uint64_t *, uint8_t *);
+
+/*void selMBB(uint64_t *, uint64_t) __attribute__((preserve_all));
 void selInst(uint64_t *, uint8_t *) __attribute__((preserve_all));
-void selMBB(uint64_t *, uint64_t) __attribute__((preserve_all));
-void doInject(unsigned , uint64_t *, uint64_t *, uint8_t *) __attribute__((preserve_all));
+void doInject(unsigned , uint64_t *, uint64_t *, uint8_t *) __attribute__((preserve_all));*/
 void init() __attribute__((constructor));
 void fini() __attribute__((destructor));
 
@@ -23,11 +27,11 @@ static uint64_t fi_iterator = 0;
 static uint64_t fi_iterator_local = 0;
 
 // FI
-enum {
+static enum type {
     DO_PROFILING,
     DO_REPRODUCTION,
     DO_RANDOM
-} action;
+} action; 
 
 enum {
     REFINE_BB=0,
@@ -63,12 +67,14 @@ void selMBB(uint64_t *ret, uint64_t num_insts)
 
     uint64_t fi_iterator_pre = fi_iterator;
     fi_iterator += num_insts;
+    //printf("fi_iterator %"PRIu64"\n", fi_iterator); //ggout
 
     // fi_index > 0 for fault injection
     if( fi_index > 0 ) {
         // Count at Inst level
         if ( fi_index <= fi_iterator_pre ) {
             *ret = REFINE_DETACH;
+            //*ret = REFINE_BB;
             //printf("DETACH fi_index %"PRIu64" < fi_iterator_pre %"PRIu64"\n", fi_index, fi_iterator_pre);
         }
         else if( ( fi_iterator_pre < fi_index ) && ( fi_index <= ( fi_iterator_pre + num_insts ) ) ) {
@@ -83,9 +89,11 @@ void selInst(uint64_t *ret, uint8_t *instr_str)
 {
     *ret = 0;
     fi_iterator_local++;
+    //printf("fi_iterator_local %"PRIu64"\n", fi_iterator_local); //ggout
     if( fi_iterator_local == fi_index ) {
         *ret = 1;
-        //printf("INJECT fi_iterator_local=%llu, ins=%s\n", fi_iterator_local, instr_str);
+        //printf("INJECT fi_iterator_local=%"PRIu64", ins=%s\n", fi_iterator_local, instr_str);
+        printf("INJECT fi_iterator_local=%"PRIu64"\n", fi_iterator_local); //ggout
     }
 }
 
@@ -113,14 +121,12 @@ void doInject(unsigned num_ops, uint64_t *op, uint64_t *size, uint8_t *bitmask)
         inj_fp = fopen(inject_fname, "w");
         fprintf(inj_fp, "fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", \
                 fi_index, op_num, op_size, bit_pos);
-        /*fprintf(inj_fp, "fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", \
-                fi_iterator[0], op_num, op_size, bit_pos);*/
-        //TODO: for multiple faults, fflush and fclose at fini
+        //TODO: for multiple faults, fflush, fclose at last fault
         fclose(inj_fp);
     }
 
     //printf("op_size %llu size[*op] %llu\n", op_size, size[*op]);
-    assert( ( op_size == size[*op] ) && "op_size != size[*op]");
+    //assert( ( op_size == size[*op] ) && "op_size != size[*op]"); //ggout ggin
 
     unsigned i;
     for(i=0; i<op_size; i++)
@@ -142,8 +148,7 @@ void init()
     if( ( inj_fp = fopen(inject_fname, "r") ) ) {
         // reproduce injection
         printf("REPRODUCE INJECTION\n");
-        assert(0 && "Reproducing experiments is work-in-progress for parallel programs\n");
-        int ret = fscanf(inj_fp, "fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", \
+        int ret = fscanf(inj_fp, "fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u", \
                 &fi_index, &op_num, &op_size, &bit_pos);
         fprintf(stdout, "fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", \
                 fi_index, op_num, op_size, bit_pos);
@@ -163,7 +168,7 @@ void init()
         assert(ret == 1 && "fscanf failed to parse input\n");
         assert(fi_index > 0 && "fi_index <= 0\n");
 
-        printf("TARGET fi_index=%"PRIu64"\n", fi_index);
+        //printf("TARGET fi_index=%"PRIu64"\n", fi_index);
 
         fclose(tgt_fp);
 
@@ -181,7 +186,7 @@ void init()
     }
     // This is a profiling run to get the number of target instructions
     else {
-        printf("PROFILING RUN\n");
+        //printf("PROFILING RUN\n");
         action = DO_PROFILING;
     }
 }
@@ -198,5 +203,7 @@ void fini()
         fprintf(stderr, "fi_index=%"PRIu64"\n", fi_iterator);
         fclose(ins_fp);
     }
+
+    //printf("fi_iterator: %"PRIu64"\n", fi_iterator); //ggout
 }
 

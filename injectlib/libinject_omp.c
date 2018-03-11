@@ -13,9 +13,14 @@
 #include "mt64.h"
 
 // TODO: preserve_all is too paranoid, should save at caller site needed registers
+void selInst(uint64_t *, uint8_t *);
+void selMBB(uint64_t *, uint64_t);
+void doInject(unsigned , uint64_t *, uint64_t *, uint8_t *);
+
+/*void selMBB(uint64_t *, uint64_t) __attribute__((preserve_all));
 void selInst(uint64_t *, uint8_t *) __attribute__((preserve_all));
-void selMBB(uint64_t *, uint64_t) __attribute__((preserve_most));
-void doInject(unsigned , uint64_t *, uint64_t *, uint8_t *) __attribute__((preserve_all));
+void doInject(unsigned , uint64_t *, uint64_t *, uint8_t *) __attribute__((preserve_all));*/
+
 void init() __attribute__((constructor));
 void fini() __attribute__((destructor));
 
@@ -28,7 +33,7 @@ atomic_int gtid = 0;
 //_Atomic uint64_t fi_iterator_atomic = 0;
 
 // FI
-enum {
+static enum {
     DO_PROFILING,
     DO_REPRODUCTION,
     DO_RANDOM
@@ -52,9 +57,12 @@ const char *target_fname = "refine-target.txt";
 const char *inject_fname = "refine-inject.txt";
 FILE *ins_fp, *tgt_fp, *inj_fp;
 
+static uint64_t count = 0;
+
 void selMBB(uint64_t *ret, uint64_t num_insts)
 {
     *ret = REFINE_BB;
+
     if(tid < 0) {
         tid = atomic_fetch_add(&gtid, 1);
     }
@@ -142,7 +150,7 @@ void init()
         // reproduce injection
         printf("REPRODUCE INJECTION\n");
         assert(0 && "Reproducing experiments is work-in-progress for parallel programs\n");
-        fscanf(inj_fp, "thread=%d, fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", \
+        fscanf(inj_fp, "thread=%d, fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u", \
                 &fi_thread, &fi_index, &op_num, &op_size, &bit_pos);
         fprintf(stdout, "thread=%d, fi_index=%"PRIu64", op=%"PRIu64", size=%"PRIu64", bitflip=%u\n", \
                 fi_thread, fi_index, op_num, op_size, bit_pos);
@@ -179,7 +187,7 @@ void init()
     }
     // This is a profiling run to get the number of target instructions
     else {
-        printf("PROFILING RUN\n");
+        //printf("PROFILING RUN\n");
         action = DO_PROFILING;
     }
 
@@ -196,17 +204,17 @@ void fini()
         ins_fp = fopen(inscount_fname, "w");
         assert(ins_fp != NULL && "Error opening inscount file\n");
         printf("No threads %d\n", gtid); //ggout
-        uint64_t total_ins = 0;
+        uint64_t sum = 0;
         int i;
         for(i=0; i < gtid; i++) {
             fprintf(ins_fp, "thread=%d, fi_index=%"PRIu64"\n", i, fi_iterator[i].v);
             fprintf(stderr, "thread=%d, fi_index=%"PRIu64"\n", i, fi_iterator[i].v);
-            total_ins += fi_iterator[i].v;
+            sum += fi_iterator[i].v;
         }
+        fprintf(ins_fp, "fi_index=%"PRIu64"\n", sum);
         //fprintf(stderr, "total: %"PRIu64" -- atomic: %"PRIu64"\n", total_ins, fi_iterator_atomic);
-        fprintf(stderr, "total: %"PRIu64"\n", total_ins);
+        fprintf(stderr, "sum : %"PRIu64"\n", sum);
         fclose(ins_fp);
-        printf("v2\n");
     }
 }
 
