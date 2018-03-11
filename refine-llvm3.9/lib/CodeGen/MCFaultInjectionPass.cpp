@@ -101,13 +101,15 @@ namespace {
     static char ID;
 
     MCFaultInjectionPass() : MachineFunctionPass(ID) {
-      dbgs() << "==== MCFAULTINJECTIONPASS ====\n"; //ggout
+      if(FIEnable) dbgs() << "==== MCFAULTINJECTIONPASS ====\n"; //ggout
       TotalInstrCount = 0; TotalTargetInstrCount = 0;
     }
 
     ~MCFaultInjectionPass() {
-      dbgs() << "END TotalInstrCount: " << TotalInstrCount << ", TotalTargetInstrCount:" << TotalTargetInstrCount << "\n";
-      dbgs() << "==== END MCFAULTINJECTIONPASS ====\n"; //ggout
+      if(FIEnable) {
+        dbgs() << "END TotalInstrCount: " << TotalInstrCount << ", TotalTargetInstrCount:" << TotalTargetInstrCount << "\n";
+        dbgs() << "==== END MCFAULTINJECTIONPASS ====\n"; //ggout
+      }
     }
 
     bool doInitialization(Module &M) override {
