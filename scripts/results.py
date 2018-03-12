@@ -21,7 +21,7 @@ parser.add_argument('-a', '--apps', help='applications to run ( ' + ' | '.join(d
 parser.add_argument('-i', '--input', help='input size', choices=data.inputs, required=True)
 parser.add_argument('-s', '--start', help='start trial', type=int, required=True)
 parser.add_argument('-e', '--end', help='end trial', type=int, required=True)
-parser.add_argument('-v', '--verbose', help='end trial', default=False, action='store_true') 
+parser.add_argument('-v', '--verbose', help='verbose', default=False, action='store_true') 
 args = parser.parse_args()
 
 # Error checking

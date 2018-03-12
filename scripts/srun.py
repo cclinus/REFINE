@@ -18,20 +18,6 @@ except:
     print('Env variable HOME is missing')
     sys.exit(1)
 
-try:
-    pinroot = os.environ['PIN_ROOT']
-except:
-    print('Env variable PIN_ROOT is missing')
-    sys.exit(1)
-
-try:
-    pinfidir = os.environ['PINFI']
-except:
-    print('Env variable PINFI is missing')
-    sys.exit(1)
-
-pinbin = pinroot + 'pin'
-
 parser = argparse.ArgumentParser('Run profiling experiments')
 parser.add_argument('-d', '--appdir', help='applications root directory', required=True)
 parser.add_argument('-r', '--resdir', help='results directory', required=True)
@@ -45,12 +31,13 @@ parser.add_argument('-c', '--config', help='run configuration \n <serial | omp> 
 parser.add_argument('-i', '--input', help='input size', choices=data.inputs, required=True)
 parser.add_argument('-s', '--start', help='start trial', type=int, required=True)
 parser.add_argument('-e', '--end', help='end trial', type=int, required=True)
+parser.add_argument('-v', '--verbose', help='verbose', default=False, action='store_true') 
 args = parser.parse_args()
 
 # Error checking
 assert os.path.isdir(args.appdir), 'Applications directory: ' + args.appdir + 'does not exist'
 assert args.nodes > 0, 'Nodes arg must be > 0'
-assert args.workers >= 0, 'Workers muse be >= 0'
+assert args.workers >= 0, 'Workers must be >= 0'
 assert not (args.tool == 'golden' and args.action == 'fi'), 'Cannot fi with tool golden'
 if args.apps == ['ALL']:
     args.apps = data.apps
@@ -94,7 +81,8 @@ def run_batch(exps):
         #print("==== end runargs ====")
         # Create unique job id for workers to update progress
         jobid = '%d.%d'%(os.getpid(), i)
-        print('jobid ' + jobid) # ggout
+        if args.verbose:
+            print('jobid ' + jobid) # ggout
         # Touch file
         with open(jobid + '.log', 'w') as f:
             f.write('0\n')
@@ -114,69 +102,87 @@ def run_batch(exps):
             p = subprocess.Popen(runlist)
         else:
             print('Invalid execution partition ' + args.partition)
-        jobs.append({'tool':args.tool, 'range': str(args.start) + '-' + str(args.end), 'proc': p, 'jobid':jobid})
+        jobs.append({'proc': p, 'jobid':jobid})
 
-    try:
-        # Keeps time
-        t = 1
-        avg_rate = 0
-        last_completed = 0
-        while True:
-            completed = 0
-            total = len(exps)
+    if args.partition != 'echo':
+        try:
+            # Keeps time
+            t = 1
+            avg_rate = 0
+            last_completed = 0
+            win_t = 10
+            while True:
+                completed = 0
+                total = len(exps)
+                for j in jobs:
+                    try:
+                        with open(j['jobid']+'.log', 'r') as f:
+                            completed += int( f.read() )
+                    # ignore concurrent write problems
+                    except ValueError:
+                        continue
+                #print('completed %d total %d'%(completed, total) )
+                frac = completed/total
+                full_progbar = 50
+                filled_progbar = round(frac * full_progbar)
+                rate = round( avg_rate, 2 )
+
+                m, s = divmod(t, 60)
+                h, m = divmod(m, 60)
+
+                if rate > 0:
+                    e_s = (total - completed) / rate 
+                    e_m, e_s = divmod(e_s, 60)
+                    e_h, e_m = divmod(e_m, 60)
+                else:
+                    e_h = e_m = e_s = 0
+
+                print('\r','Status %5d / %5d'%(completed, total)
+                        , '#'*filled_progbar + '-'*(full_progbar - filled_progbar)
+                        , '[{:>7.2%}]'.format(frac)
+                        , '| %3.2f exps/s'%(rate)
+                        , '| Elapsed %2d:%02d:%02d' % (h, m, s)
+                        , '| Est. remaining %2d:%02d:%02d' % (e_h, e_m, e_s)
+                        , end='')
+                if completed >= total:
+                    break
+                time.sleep(1)
+                t += 1
+                if t % win_t == 0:
+                    avg_rate = 0.5 * ( ( completed - last_completed ) / win_t ) + 0.5 * avg_rate
+                    last_completed = completed
+        except KeyboardInterrupt:
             for j in jobs:
-                #if j['proc'].wait() != 0:
-                #    print('Error in process: ' + j['tool'] + ', range: ' + j['range'] +', ret: ' + str(j['proc'].returncode))
-                try:
-                    with open(j['jobid']+'.log', 'r') as f:
-                        completed += int( f.read() )
-                # ignore concurrent write problems
-                except ValueError:
-                    continue
-            #print('completed %d total %d'%(completed, total) )
-            frac = completed/total
-            full_progbar = 50
-            filled_progbar = round(frac * full_progbar)
-            rate = round( avg_rate, 2 )
-
-            m, s = divmod(t, 60)
-            h, m = divmod(m, 60)
-
-            if rate > 0:
-                e_s = (total - completed) / rate 
-                e_m, e_s = divmod(e_s, 60)
-                e_h, e_m = divmod(e_m, 60)
-            else:
-                e_h = e_m = e_s = 0
-
-            print('\r','Status %5d / %5d'%(completed, total)
-                    , '#'*filled_progbar + '-'*(full_progbar - filled_progbar)
-                    , '[{:>7.2%}]'.format(frac)
-                    , '| %3.2f exps/s'%(rate)
-                    , '| Elapsed %2d:%02d:%02d' % (h, m, s)
-                    , '| Est. remaining %2d:%02d:%02d' % (e_h, e_m, e_s)
-                    , end='')
-            if completed >= total:
-                break
-            time.sleep(1)
-            t += 1
-            avg_rate = 0.25 * ( completed - last_completed ) + 0.75 * avg_rate
-            last_completed = completed
-    except KeyboardInterrupt:
-        for j in jobs:
-            j['proc'].terminate()
+                j['proc'].terminate()
+        print( '\nTotal rate %3.2f exps/s'%( completed / t ) )
+        with open('%s-%s-%s-%s-%s-%s.txt'%(args.tool, config, args.action, instrument, nthreads, args.input), 'w') as f:
+            f.write(str(t) + ' seconds\n')
     
-    print( '\nTotal rate %3.2f exps/s'%( completed / t ) )
+    for j in jobs:
+        if j['proc'].wait() != 0:
+            print( 'Error in job: ' + j['jobid'] )
+
     print('Removing log files...')
     # Remove log files
     for j in jobs:
         os.remove(j['jobid']+'.log')
 
+print( 'Experiment: %s %s %s %s %s %s %s'%( args.tool, config, ' '.join(args.apps), args.action, instrument, nthreads, args.input) )
 # Create fault injection experiment tuples
 exps = []
 for app in args.apps:
     basedir = '%s/%s/%s/%s/%s/%s/%s/%s/'%(args.resdir, args.tool, config, app, args.action, instrument, nthreads, args.input)
-    print( 'Experiment: %s %s %s %s %s %s %s'%( args.tool, config, app, args.action, instrument, nthreads, args.input) )
+    
+    if args.action == 'fi':
+        # get timeout
+        profiledir = '%s/%s/%s/%s/%s/%s/%s/%s'%(args.resdir, args.tool, config, app, 'profile', instrument, nthreads, args.input)
+        fname = '/%s/mean_time.txt'%(profiledir)
+        with open(fname, 'r') as f:
+            timeout = float( f.read() )
+        # XXX: PINFI instruction counts BB, but faultinjections is INS! Use a large timeout
+        print('Read mean profiling time: %.2f, setting timeout 20x:  %.2f'%(timeout, timeout*20) )
+        timeout = round(20 * timeout, 2)
+
     for trial in range(args.start, args.end+1):
         trialdir = basedir + '/' + str(trial) +'/'
         #print(trialdir)
@@ -191,16 +197,11 @@ for app in args.apps:
             timeout = 0
         elif args.action == 'fi':
             assert os.path.exists(trialdir), 'Trialdir %s does not exist, forgot to run generate-fi-samples?'%(trialdir)
-            assert not os.path.isfile(trialdir + '/'+ fi_tools.files[args.tool]['injection']),\
-            'Reproducible injection is not supported: ' + trialdir + '/' + fi_tools.files[args.tool]['injection']
-            # get timeout
-            profiledir = '%s/%s/%s/%s/%s/%s/%s/%s'%(args.resdir, args.tool, config, app, 'profile', instrument, nthreads, args.input)
-            fname = '/%s/mean_time.txt'%(profiledir)
-            with open(fname, 'r') as f:
-                timeout = float( f.read() )
-            # XXX: PINFI instruction counts BB, but faultinjections is INS! Use a large timeout
-            print('Read mean profiling time: %.2f, setting timeout 20x:  %.2f'%(timeout, timeout*20) )
-            timeout = round(20 * timeout, 2)
+            #assert not os.path.isfile(trialdir + '/'+ fi_tools.files[args.tool]['injection']),\
+            #'Reproducible injection is not supported: ' + trialdir + '/' + fi_tools.files[args.tool]['injection']
+            if os.path.isfile(trialdir + '/'+ fi_tools.files[args.tool]['injection']):
+                print('WARNING: Reproducible injection is not supported, deleting old injection file')
+                os.remove(trialdir + '/'+ fi_tools.files[args.tool]['injection'])
         else:
             assert False, 'Invalid action:' + args.action
 
@@ -241,21 +242,20 @@ for app in args.apps:
         ## Setup the env
         runenv = []
         if config == 'omp':
-            runenv += [ '-e', 'OMP_NUM_THREADS', nthreads ]
+            runenv += [ '-e', 'OMP_NUM_THREADS', nthreads, '-e', 'KMP_AFFINITY', 'compact,verbose' ]
         if args.tool == 'refine':
             if instrument == 'all' or instrument == 'omplib':
                 runenv += [ '-e', 'LD_LIBRARY_PATH', homedir + '/usr/local/refine/lib:' + homedir + '/usr/local/lib' ]
 
         ## Append to experiments (must be string list)
         exps.append( runenv + ['-r', trialdir, str(timeout), exelist] )
-        print(runenv + ['-r', trialdir, str(timeout), exelist])
-        print(exelist)
+        if args.verbose:
+            print(runenv + ['-r', trialdir, str(timeout), exelist])
         #sys.exit(123)
 #print("==== experiments ====")
 #print(exps)
 #print("==== end experimetns ====")
-print("Nof exps:", end='')
-print(len(exps))
+print('Nof exps: %d'%( len(exps) ) )
 if(exps):
     run_batch(exps)
 

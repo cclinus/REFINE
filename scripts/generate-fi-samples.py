@@ -88,8 +88,8 @@ def write_fi_files(basedir, tool, config, samples, m_thread_inscount):
 
                     sum_inscount += inscount
 
-                print('target=%d'%(target) )
-                print('thread=%d, fi_index=%d\n'%( thread, fi_index ))
+                #print('target=%d'%(target) )
+                #print('thread=%d, fi_index=%d\n'%( thread, fi_index ))
                 #input('press key to continue...')
                 with open(fname, 'w') as f:
                     f.write('thread=%d, fi_index=%d\n'%( thread, fi_index ))
@@ -111,7 +111,8 @@ def main():
     parser.add_argument('-i', '--input', help='input size', choices=['test', 'small', 'large'], required=True)
     parser.add_argument('-ps', '--pstart', help='profiling start', type=int, required=True)
     parser.add_argument('-pe', '--pend', help='profilng end', type=int, required=True)
-    parser.add_argument('-n', '--nsamples', help='Number of FI samples', type=int, required=True)
+    parser.add_argument('-g', '--generate', help='generate FI samples', action='store_true')
+    parser.add_argument('-n', '--nsamples', help='number of FI samples', type=int, required=True)
     args = parser.parse_args()
 
     # Error checking
@@ -148,21 +149,23 @@ def main():
         profiledir = '%s/%s/%s/%s/%s/%s/%s/%s'%(args.resdir, args.tool, config, app, 'profile', instrument, nthreads, args.input)
 
         m_time, m_inscount, s_inscount, m_thread_inscount = parse_profile(profiledir, args.tool, config, nthreads, args.input, args.pstart, args.pend)
-        print('mean inst. per thread')
-        print(m_thread_inscount)
+        if m_thread_inscount:
+            print('mean inst. per thread')
+            print(m_thread_inscount)
         print('mean inscount %d std %d'%(m_inscount, s_inscount) )
         print('mean time %.2f'%(m_time) )
 
-        # create fi samples
-        samples = random.sample(range(1, m_inscount+1), args.nsamples)
+        if args.generate :
+            # create fi samples
+            samples = random.sample(range(1, m_inscount+1), args.nsamples)
 
-        # XXX replace profle -> fi
-        fidir = '%s/%s/%s/%s/%s/%s/%s/%s'%(args.resdir, args.tool, config, app, 'fi', instrument, nthreads, args.input)
-        
-        write_fi_files(fidir, args.tool, config, samples, m_thread_inscount)
+            # XXX replace profle -> fi
+            fidir = '%s/%s/%s/%s/%s/%s/%s/%s'%(args.resdir, args.tool, config, app, 'fi', instrument, nthreads, args.input)
+            
+            write_fi_files(fidir, args.tool, config, samples, m_thread_inscount)
 
-        samples = [n/m_inscount for n in samples]
-        plot_hist(samples, title='Target distro', bincount=100, xlab=True)
+            samples = [n/m_inscount for n in samples]
+            plot_hist(samples, title='Target distro', bincount=100, xlab=True)
 
 if __name__ == "__main__":
     main()

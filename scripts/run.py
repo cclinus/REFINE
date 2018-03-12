@@ -54,8 +54,8 @@ def run(e):
     #print(exelist)
     #print('==== end of exelist ====')
 
-    out_file = open(trialdir + 'output.txt', 'w')
-    err_file = open(trialdir + 'error.txt', 'w')
+    out_file = open(trialdir + '/output.txt', 'w')
+    err_file = open(trialdir + '/error.txt', 'w')
     ret = 0
     timed_out = False
 
@@ -85,7 +85,7 @@ def run(e):
     err_file.close()
 
     #print('RET: ' + str(ret))
-    ret_file = open(trialdir + 'ret.txt', 'w')
+    ret_file = open(trialdir + '/ret.txt', 'w')
     if timed_out:
         ret_file.write('timeout\n')
         #print('Process timed out!')
@@ -98,7 +98,7 @@ def run(e):
     ret_file.close()
 
     #print('time: %.2f'%(xtime))
-    with open(trialdir + 'time.txt', 'w') as f:
+    with open(trialdir + '/time.txt', 'w') as f:
         f.write('%.2f'%(xtime) + '\n')
 
     counter.increment()

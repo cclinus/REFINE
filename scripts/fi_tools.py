@@ -18,7 +18,7 @@ except:
     sys.exit(1)
 
 
-pinbin = pinroot + 'pin'
+pinbin = pinroot + '/pin'
 
 files = {
         'pinfi': {
