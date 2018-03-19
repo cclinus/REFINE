@@ -51,16 +51,14 @@ def build(action, repeat, workdir, args):
         with open(workdir+'mean-compile-time.txt', 'w') as f:
             f.write('%.2f'%(np.mean(times)) + '\n')
 
-tools = ['golden', 'pinfi', 'refine', 'refine-noff']
-
 parser = argparse.ArgumentParser('Build applications for tools and their configurations')
 # tuple of 3: (tool, app, iter)
 parser.add_argument('-d', '--appdir', help='application directory', required=True)
-parser.add_argument('-t', '--tools', help='tool to build ( golden | refine | refine-noff )', nargs='+', required=True)
-parser.add_argument('-c', '--configs', help='configuration to build ( serial | omp )', nargs='+', required=True)
+parser.add_argument('-t', '--tools', help='tool to build', choices=['golden','refine','refine-noff'], nargs='+', required=True)
+parser.add_argument('-c', '--configs', help='configuration to build', choices=['serial','omp'], nargs='+', required=True)
 parser.add_argument('-a', '--apps', help='applications to build ( ' + ' | '.join(data.apps) + ' | ALL ) ', nargs='+', required=True)
 parser.add_argument('-i', '--inputs', help='inputs to build for (' + ' | '.join(data.inputs) + ' )', nargs='+', required=True)
-parser.add_argument('-o', '--action', help='action (build | clean | profile)', required=True)
+parser.add_argument('-o', '--action', help='action', choices=['build','clean','profile'], required=True)
 parser.add_argument('-r', '--repeat', help='repeat build action ( to profile compiling times )', type=int, default=1)
 args = parser.parse_args()
 
@@ -69,13 +67,8 @@ for a in args.apps:
     assert a in data.apps or a == 'ALL', 'Application: ' + a + ' is invalid'
 if args.apps == ['ALL']:
     args.apps = data.apps
-for t in args.tools:
-    assert t in tools, 'Tool: ' + t + ' is invalid'
-for c in args.configs:
-    assert c in data.configs, 'Config ' + c + ' is invalid' 
 for i in args.inputs:
     assert i in data.inputs, 'Input:' + i + ' is invalid'
-assert args.action in ['build','clean','profile'], 'Action: ' + args.action + ' is invalid'
 assert args.repeat >=1, 'Repeat: ' + args.repeat+ 'is invalid'
 
 for t in args.tools:

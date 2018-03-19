@@ -1,13 +1,11 @@
 import os
 import sys
 
-#TODO: REMOVE NTHREADS
-NTHREADS = '16'
-
 #Programs
 ## XXX: IS is very short running and it has no output to verify
-#TODO ADD MG
-apps = [ 'AMG' , 'CoMD', 'HPCCG-1.0', 'lulesh', 'XSBench', 'miniFE', 'BT', 'CG', 'DC', 'EP', 'FT', 'LU', 'MG', 'SP', 'UA' ]
+# TODO: FIX UA, RE-RUN UA experiments for small input, changed to A. Possible large too because removing
+#apps = [ 'AMG' , 'CoMD', 'HPCCG-1.0', 'lulesh', 'XSBench', 'miniFE', 'BT', 'CG', 'DC', 'EP', 'FT', 'LU', 'MG', 'SP', 'UA' ]
+apps = [ 'AMG' , 'CoMD', 'HPCCG-1.0', 'lulesh', 'XSBench', 'miniFE', 'BT', 'CG', 'DC', 'EP', 'FT', 'LU', 'MG', 'SP' ]
 inputs = [ 'test', 'small', 'large' ]
 configs = [ 'serial', 'omp' ]
 
@@ -16,8 +14,9 @@ NASDIR_SER = 'NPB3.3-SER-C/'
 NASDIR_OMP = 'NPB3.3-OMP-C/'
 
 # FP formats for verifying
-EXPFLOAT = r'[+-]?\d+\.\d+[Ee][+-]?\d+'
-FLOAT = r'[+-]?\d+\.\d+'
+#FLOAT = r'[+-]?\d+\.(?:\d+|\d+[Ee][+-]?\d+)'
+FLOAT = r'[+-]?\d+\.(?:\d+|\d+[Ee][+-]?\d+)'
+#FLOAT = r'[+-]?\d+\.\d+'
 
 # builddir: where to run make
 # rundir: where to run experiments
@@ -31,11 +30,11 @@ programs = {
                 'small' : ['/AMG/test/amg', '-n', '96', '96', '96'],
                 'large' : ['/AMG/test/amg', '-n', '256', '256', '256'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test'  :['Final Relative Residual Norm = ' + EXPFLOAT],
-                'small' :['Final Relative Residual Norm = ' + EXPFLOAT],
-                'large' :['Final Relative Residual Norm = ' + EXPFLOAT],
+                'test'  :['Final Relative Residual Norm = ' + FLOAT],
+                'small' :['Final Relative Residual Norm = ' + FLOAT],
+                'large' :['Final Relative Residual Norm = ' + FLOAT],
             }
         },
 
@@ -47,7 +46,7 @@ programs = {
                 'small' : ['/CoMD/bin/CoMD-serial', '-d', '$APPDIR/pots/', '-e', '-i', '1', '-j', '1', '-k', '1', '-x', '32', '-y', '32', '-z', '32'],
                 'large' : ['/CoMD/bin/CoMD-serial', '-d', '$APPDIR/pots/', '-e', '-i', '1', '-j', '1', '-k', '1', '-x', '64', '-y', '64', '-z', '64']
             },
-            'cleanup' : '/bin/rm -rf CoMD*yaml',
+            'clean' : '/bin/rm -rf CoMD*yaml',
             'verify' : {
                 'test' : ['Final energy\s+: ' + FLOAT, 'Final atom count : \d+, no atoms lost' ],
                 'small': ['Final energy\s+: ' + FLOAT, 'Final atom count : \d+, no atoms lost' ],
@@ -62,11 +61,11 @@ programs = {
                 'small': ['HPCCG-1.0/test_HPCCG', '128', '128', '128'],
                 'large': ['HPCCG-1.0/test_HPCCG', '256', '256', '256']
             },
-            'cleanup' : '/bin/rm -rf hpccg*yaml',
+            'clean' : '/bin/rm -rf hpccg*yaml',
             'verify' : {
-                'test'  : ['Final residual: : ' + EXPFLOAT ],
-                'small' : ['Final residual: : ' + EXPFLOAT ],
-                'large' : ['Final residual: : ' + EXPFLOAT ],
+                'test'  : ['Final residual: : ' + FLOAT ],
+                'small' : ['Final residual: : ' + FLOAT ],
+                'large' : ['Final residual: : ' + FLOAT ],
             }
         },
 
@@ -77,22 +76,22 @@ programs = {
                 'small' : ['lulesh/lulesh2.0'],
                 'large' : ['lulesh/lulesh2.0', '-s', '50'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test'  : ['Final Origin Energy = ' + EXPFLOAT ],
-                'small' : ['Final Origin Energy = ' + EXPFLOAT ],
-                'large' : ['Final Origin Energy = ' + EXPFLOAT ],
+                'test'  : ['Final Origin Energy = ' + FLOAT ],
+                'small' : ['Final Origin Energy = ' + FLOAT ],
+                'large' : ['Final Origin Energy = ' + FLOAT ],
             }
         },
-        # XXX: XSBench needs the number of threads
+
         'XSBench' : {
             'builddir':'XSBench/src/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
             'exec' : {
                 'test'  : ['/XSBench/src/XSBench','-s','small', '-l', '100000'],
                 'small' : ['/XSBench/src/XSBench','-s','small'],
-                'large' : ['/XSBench/src/XSBench','-s','large','-t',NTHREADS],
+                'large' : ['/XSBench/src/XSBench','-s','large'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
                 'test'  : ['Verification checksum: 500568216'],
                 'small' : ['Verification checksum: 74966788162'],
@@ -107,11 +106,11 @@ programs = {
                 'small' : ['/miniFE/ref/src/miniFE.x','-nx','64','-ny','64','-nz','64'],
                 'large' : ['/miniFE/ref/src/miniFE.x','-nx','256','-ny','256','-nz','256'],
             },
-            'cleanup' : '/bin/rm -rf miniFE*yaml',
+            'clean' : '/bin/rm -rf miniFE*yaml',
             'verify' : {
-                'test'  : ['Final Resid Norm: ' + EXPFLOAT],
-                'small' : ['Final Resid Norm: ' + EXPFLOAT],
-                'large' : ['Final Resid Norm: ' + EXPFLOAT],
+                'test'  : ['Final Resid Norm: ' + FLOAT],
+                'small' : ['Final Resid Norm: ' + FLOAT],
+                'large' : ['Final Resid Norm: ' + FLOAT],
             }
         },
 
@@ -122,11 +121,11 @@ programs = {
                 'small' : [NASDIR_SER+'bin/bt.A.x'],
                 'large' : [NASDIR_SER+'bin/bt.B.x'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test' :['\d\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT],
-                'small':['\d\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT],
-                'large':['\d\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT],
+                'test' :['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
+                'small':['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
+                'large':['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
             }
         },
         'CG': {
@@ -136,11 +135,11 @@ programs = {
                 'small' : [NASDIR_SER+'bin/cg.B.x'],
                 'large' : [NASDIR_SER+'bin/cg.C.x'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test' :[' Zeta is\s+' + EXPFLOAT],
-                'small':[' Zeta is\s+' + EXPFLOAT],
-                'large':[' Zeta is\s+' + EXPFLOAT],
+                'test' :[' Zeta is\s+' + FLOAT],
+                'small':[' Zeta is\s+' + FLOAT],
+                'large':[' Zeta is\s+' + FLOAT],
             }
         },
         'DC': {
@@ -150,11 +149,11 @@ programs = {
                 'small' : [NASDIR_SER+'bin/dc.W.x'],
                 'large' : [NASDIR_SER+'bin/dc.A.x'],
             },
-            'cleanup' : '/bin/rm -rf ADC.*',
+            'clean' : '/bin/rm -rf ADC.*',
             'verify' : {
-                'test' :['Checksum\s+=\s+' + EXPFLOAT],
-                'small':['Checksum\s+=\s+' + EXPFLOAT],
-                'large':['Checksum\s+=\s+' + EXPFLOAT],
+                'test' :['Checksum\s+=\s+' + FLOAT],
+                'small':['Checksum\s+=\s+' + FLOAT],
+                'large':['Checksum\s+=\s+' + FLOAT],
             }
         },
         'EP': {
@@ -164,11 +163,11 @@ programs = {
                 'small' : [NASDIR_SER+'bin/ep.A.x'],
                 'large' : [NASDIR_SER+'bin/ep.C.x'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test' :['Sums =\s+' + EXPFLOAT + '\s+' + EXPFLOAT],
-                'small':['Sums =\s+' + EXPFLOAT + '\s+' + EXPFLOAT],
-                'large':['Sums =\s+' + EXPFLOAT + '\s+' + EXPFLOAT],
+                'test' :['Sums =\s+' + FLOAT + '\s+' + FLOAT],
+                'small':['Sums =\s+' + FLOAT + '\s+' + FLOAT],
+                'large':['Sums =\s+' + FLOAT + '\s+' + FLOAT],
             }
         },
         'FT': {
@@ -178,11 +177,11 @@ programs = {
                 'small' : [NASDIR_SER+'bin/ft.B.x'],
                 'large' : [NASDIR_SER+'bin/ft.B.x'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test' :['T =\s+\d+\s+Checksum =\s+' + EXPFLOAT + '\s+' + EXPFLOAT],
-                'small':['T =\s+\d+\s+Checksum =\s+' + EXPFLOAT + '\s+' + EXPFLOAT],
-                'large':['T =\s+\d+\s+Checksum =\s+' + EXPFLOAT + '\s+' + EXPFLOAT],
+                'test' :['T =\s+\d+\s+Checksum =\s+' + FLOAT + '\s+' + FLOAT],
+                'small':['T =\s+\d+\s+Checksum =\s+' + FLOAT + '\s+' + FLOAT],
+                'large':['T =\s+\d+\s+Checksum =\s+' + FLOAT + '\s+' + FLOAT],
             }
         },
         'IS': {
@@ -192,7 +191,7 @@ programs = {
                 'small' : [NASDIR_SER+'bin/is.A.x'],
                 'large' : [NASDIR_SER+'bin/is.A.x'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
                 # XXX: no way to verify IS
             }
@@ -204,11 +203,11 @@ programs = {
                 'small' : [NASDIR_SER+'bin/lu.A.x'],
                 'large' : [NASDIR_SER+'bin/lu.C.x'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test' : ['\d\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT, '\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT, ],
-                'small': ['\d\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT, '\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT, ],
-                'large': ['\d\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT, '\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT, ],
+                'test' : ['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, '\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
+                'small': ['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, '\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
+                'large': ['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, '\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
             }
         },
         'MG': {
@@ -218,12 +217,12 @@ programs = {
                 'small' : [NASDIR_SER+'bin/mg.B.x'],
                 'large' : [NASDIR_SER+'bin/mg.C.x'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-            #    **dict.fromkeys( ['test', 'small', 'large'], ['\n L2 Norm is\s+' + EXPFLOAT ] )
-                'test' : ['\n L2 Norm is\s+' + EXPFLOAT ],
-                'small': ['\n L2 Norm is\s+' + EXPFLOAT ],
-                'large': ['\n L2 Norm is\s+' + EXPFLOAT ],
+            #    **dict.fromkeys( ['test', 'small', 'large'], ['\n L2 Norm is\s+' + FLOAT ] )
+                'test' : ['\n L2 Norm is\s+' + FLOAT ],
+                'small': ['\n L2 Norm is\s+' + FLOAT ],
+                'large': ['\n L2 Norm is\s+' + FLOAT ],
             }
         },
         'SP': {
@@ -233,25 +232,25 @@ programs = {
                 'small' : [NASDIR_SER+'bin/sp.A.x'],
                 'large' : [NASDIR_SER+'bin/sp.B.x'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test' :['\d\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT],
-                'small':['\d\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT],
-                'large':['\d\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT],
+                'test' :['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
+                'small':['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
+                'large':['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
             }
         },
         'UA': {
-            'rundir':NASDIR_SER+'UA/','builddir':NASDIR_SER,'buildargs':{'test': ['UA','CLASS=S'], 'small': ['UA','CLASS=B'], 'large': ['UA', 'CLASS=B'] },
+            'rundir':NASDIR_SER+'UA/','builddir':NASDIR_SER,'buildargs':{'test': ['UA','CLASS=S'], 'small': ['UA','CLASS=A'], 'large': ['UA', 'CLASS=B'] },
             'exec' : {
                 'test'  : [NASDIR_SER+'bin/ua.S.x'],
-                'small' : [NASDIR_SER+'bin/ua.B.x'],
+                'small' : [NASDIR_SER+'bin/ua.A.x'],
                 'large' : [NASDIR_SER+'bin/ua.B.x'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test' :['\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT, ],
-                'small':['\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT, ],
-                'large':['\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT, ],
+                'test' :['\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
+                'small':['\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
+                'large':['\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
             }
         }
     },
@@ -263,11 +262,11 @@ programs = {
                 'small' : ['/AMG/test/amg', '-n', '96', '96', '96'],
                 'large' : ['/AMG/test/amg', '-n', '256', '256', '256'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test'  :['Final Relative Residual Norm = ' + EXPFLOAT],
-                'small' :['Final Relative Residual Norm = ' + EXPFLOAT],
-                'large' :['Final Relative Residual Norm = ' + EXPFLOAT],
+                'test'  :['Final Relative Residual Norm = ' + FLOAT],
+                'small' :['Final Relative Residual Norm = ' + FLOAT],
+                'large' :['Final Relative Residual Norm = ' + FLOAT],
             }
         },
 
@@ -279,7 +278,7 @@ programs = {
                 'small' : ['/CoMD/bin/CoMD-openmp', '-d', '$APPDIR/pots/', '-e', '-i', '1', '-j', '1', '-k', '1', '-x', '32', '-y', '32', '-z', '32'],
                 'large' : ['/CoMD/bin/CoMD-openmp', '-d', '$APPDIR/pots/', '-e', '-i', '1', '-j', '1', '-k', '1', '-x', '64', '-y', '64', '-z', '64']
             },
-            'cleanup' : '/bin/rm -rf CoMD*yaml',
+            'clean' : '/bin/rm -rf CoMD*yaml',
             'verify' : {
                 'test' : ['Final energy\s+: ' + FLOAT, 'Final atom count : \d+, no atoms lost' ],
                 'small': ['Final energy\s+: ' + FLOAT, 'Final atom count : \d+, no atoms lost' ],
@@ -294,11 +293,11 @@ programs = {
                 'small' : ['HPCCG-1.0/test_HPCCG', '128', '128', '128'],
                 'large' : ['HPCCG-1.0/test_HPCCG', '256', '256', '256']
             },
-            'cleanup' : '/bin/rm -rf hpccg*yaml',
+            'clean' : '/bin/rm -rf hpccg*yaml',
             'verify' : {
-                'test'  : ['Final residual: : ' + EXPFLOAT ],
-                'small' : ['Final residual: : ' + EXPFLOAT ],
-                'large' : ['Final residual: : ' + EXPFLOAT ],
+                'test'  : ['Final residual: : ' + FLOAT ],
+                'small' : ['Final residual: : ' + FLOAT ],
+                'large' : ['Final residual: : ' + FLOAT ],
             }
         },
 
@@ -309,22 +308,22 @@ programs = {
                 'small' : ['lulesh/lulesh2.0'],
                 'large' : ['lulesh/lulesh2.0', '-s', '50'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test'  : ['Final Origin Energy = ' + EXPFLOAT ],
-                'small' : ['Final Origin Energy = ' + EXPFLOAT ],
-                'large' : ['Final Origin Energy = ' + EXPFLOAT ],
+                'test'  : ['Final Origin Energy = ' + FLOAT ],
+                'small' : ['Final Origin Energy = ' + FLOAT ],
+                'large' : ['Final Origin Energy = ' + FLOAT ],
             }
         },
         # XXX: XSBench needs the number of threads
         'XSBench' : {
             'builddir':'XSBench/src/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
             'exec' : {
-                'test'  : ['/XSBench/src/XSBench','-s','small', '-l', '100000'],
-                'small' : ['/XSBench/src/XSBench','-s','small'],
-                'large' : ['/XSBench/src/XSBench','-s','large','-t',NTHREADS],
+                'test'  : ['/XSBench/src/XSBench','-s','small', '-l', '100000',',-t','$NTHREADS'],
+                'small' : ['/XSBench/src/XSBench','-s','small','-t','$NTHREADS'],
+                'large' : ['/XSBench/src/XSBench','-s','large','-t','$NTHREADS'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
                 'test'  : ['Verification checksum: 500568216'],
                 'small' : ['Verification checksum: 74966788162'],
@@ -339,11 +338,11 @@ programs = {
                 'small' : ['/miniFE/openmp-opt/src/miniFE.x','-nx','64','-ny','64','-nz','64'],
                 'large' : ['/miniFE/openmp-opt/src/miniFE.x','-nx','256','-ny','256','-nz','256'],
             },
-            'cleanup' : '/bin/rm -rf miniFE*yaml',
+            'clean' : '/bin/rm -rf miniFE*yaml',
             'verify' : {
-                'test'  : ['Final Resid Norm: ' + EXPFLOAT],
-                'small' : ['Final Resid Norm: ' + EXPFLOAT],
-                'large' : ['Final Resid Norm: ' + EXPFLOAT],
+                'test'  : ['Final Resid Norm: ' + FLOAT],
+                'small' : ['Final Resid Norm: ' + FLOAT],
+                'large' : ['Final Resid Norm: ' + FLOAT],
             }
         },
 
@@ -354,11 +353,11 @@ programs = {
                 'small' : [NASDIR_OMP+'bin/bt.A.x'],
                 'large' : [NASDIR_OMP+'bin/bt.B.x'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test' :['\d\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT],
-                'small':['\d\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT],
-                'large':['\d\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT],
+                'test' :['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
+                'small':['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
+                'large':['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
             }
         },
         'CG': {
@@ -368,11 +367,11 @@ programs = {
                 'small' : [NASDIR_OMP+'bin/cg.B.x'],
                 'large' : [NASDIR_OMP+'bin/cg.C.x'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test' :[' Zeta is\s+' + EXPFLOAT],
-                'small':[' Zeta is\s+' + EXPFLOAT],
-                'large':[' Zeta is\s+' + EXPFLOAT],
+                'test' :[' Zeta is\s+' + FLOAT],
+                'small':[' Zeta is\s+' + FLOAT],
+                'large':[' Zeta is\s+' + FLOAT],
             }
         },
         'DC': {
@@ -382,11 +381,11 @@ programs = {
                 'small' : [NASDIR_OMP+'bin/dc.W.x'],
                 'large' : [NASDIR_OMP+'bin/dc.A.x'],
             },
-            'cleanup' : '/bin/rm -rf ADC.*',
+            'clean' : '/bin/rm -rf ADC.*',
             'verify' : {
-                'test' :['Checksum\s+=\s+' + EXPFLOAT],
-                'small':['Checksum\s+=\s+' + EXPFLOAT],
-                'large':['Checksum\s+=\s+' + EXPFLOAT],
+                'test' :['Checksum\s+=\s+' + FLOAT],
+                'small':['Checksum\s+=\s+' + FLOAT],
+                'large':['Checksum\s+=\s+' + FLOAT],
             }
         },
         'EP': {
@@ -396,11 +395,11 @@ programs = {
                 'small' : [NASDIR_OMP+'bin/ep.A.x'],
                 'large' : [NASDIR_OMP+'bin/ep.C.x'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test' :['Sums =\s+' + EXPFLOAT + '\s+' + EXPFLOAT],
-                'small':['Sums =\s+' + EXPFLOAT + '\s+' + EXPFLOAT],
-                'large':['Sums =\s+' + EXPFLOAT + '\s+' + EXPFLOAT],
+                'test' :['Sums =\s+' + FLOAT + '\s+' + FLOAT],
+                'small':['Sums =\s+' + FLOAT + '\s+' + FLOAT],
+                'large':['Sums =\s+' + FLOAT + '\s+' + FLOAT],
             }
         },
         'FT': {
@@ -410,11 +409,11 @@ programs = {
                 'small' : [NASDIR_OMP+'bin/ft.B.x'],
                 'large' : [NASDIR_OMP+'bin/ft.B.x'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test' :['T =\s+\d+\s+Checksum =\s+' + EXPFLOAT + '\s+' + EXPFLOAT],
-                'small':['T =\s+\d+\s+Checksum =\s+' + EXPFLOAT + '\s+' + EXPFLOAT],
-                'large':['T =\s+\d+\s+Checksum =\s+' + EXPFLOAT + '\s+' + EXPFLOAT],
+                'test' :['T =\s+\d+\s+Checksum =\s+' + FLOAT + '\s+' + FLOAT],
+                'small':['T =\s+\d+\s+Checksum =\s+' + FLOAT + '\s+' + FLOAT],
+                'large':['T =\s+\d+\s+Checksum =\s+' + FLOAT + '\s+' + FLOAT],
             }
         },
         'IS': {
@@ -424,7 +423,7 @@ programs = {
                 'small' : [NASDIR_OMP+'bin/is.A.x'],
                 'large' : [NASDIR_OMP+'bin/is.A.x'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
                 # XXX: no way to verify IS
             }
@@ -436,11 +435,11 @@ programs = {
                 'small' : [NASDIR_OMP+'bin/lu.A.x'],
                 'large' : [NASDIR_OMP+'bin/lu.C.x'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test' : ['\d\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT, '\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT, ],
-                'small': ['\d\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT, '\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT, ],
-                'large': ['\d\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT, '\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT, ],
+                'test' : ['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, '\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
+                'small': ['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, '\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
+                'large': ['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, '\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
             }
         },
         'MG': {
@@ -450,11 +449,11 @@ programs = {
                 'small' : [NASDIR_OMP+'bin/mg.B.x'],
                 'large' : [NASDIR_OMP+'bin/mg.C.x'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test' : ['\n L2 Norm is\s+' + EXPFLOAT ],
-                'small': ['\n L2 Norm is\s+' + EXPFLOAT ],
-                'large': ['\n L2 Norm is\s+' + EXPFLOAT ],
+                'test' : ['\n L2 Norm is\s+' + FLOAT ],
+                'small': ['\n L2 Norm is\s+' + FLOAT ],
+                'large': ['\n L2 Norm is\s+' + FLOAT ],
             }
         },
         'SP': {
@@ -464,25 +463,25 @@ programs = {
                 'small' : [NASDIR_OMP+'bin/sp.A.x'],
                 'large' : [NASDIR_OMP+'bin/sp.B.x'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test' :['\d\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT],
-                'small':['\d\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT],
-                'large':['\d\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT],
+                'test' :['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
+                'small':['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
+                'large':['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
             }
         },
         'UA': {
-            'rundir':NASDIR_OMP+'UA/','builddir':NASDIR_OMP,'buildargs':{'test': ['UA','CLASS=S'], 'small': ['UA','CLASS=B'], 'large': ['UA', 'CLASS=B'] },
+            'rundir':NASDIR_OMP+'UA/','builddir':NASDIR_OMP,'buildargs':{'test': ['UA','CLASS=S'], 'small': ['UA','CLASS=A'], 'large': ['UA', 'CLASS=B'] },
             'exec' : {
                 'test'  : [NASDIR_OMP+'bin/ua.S.x'],
-                'small' : [NASDIR_OMP+'bin/ua.B.x'],
+                'small' : [NASDIR_OMP+'bin/ua.A.x'],
                 'large' : [NASDIR_OMP+'bin/ua.B.x'],
             },
-            'cleanup' : '',
+            'clean' : '',
             'verify' : {
-                'test' :['\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT, ],
-                'small':['\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT, ],
-                'large':['\s+' + EXPFLOAT +' ' + EXPFLOAT + ' ' + EXPFLOAT, ],
+                'test' :['\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
+                'small':['\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
+                'large':['\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
             }
         }
     }
