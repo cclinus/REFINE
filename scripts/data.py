@@ -4,8 +4,8 @@ import sys
 #Programs
 ## XXX: IS is very short running and it has no output to verify
 # TODO: FIX UA, RE-RUN UA experiments for small input, changed to A. Possible large too because removing
-apps = [ 'AMG' , 'CoMD', 'HPCCG-1.0', 'lulesh', 'XSBench', 'miniFE', 'BT', 'CG', 'DC', 'EP', 'FT', 'LU', 'MG', 'SP', 'UA' ]
-#apps = [ 'AMG' , 'CoMD', 'HPCCG-1.0', 'lulesh', 'XSBench', 'miniFE', 'BT', 'CG', 'DC', 'EP', 'FT', 'LU', 'MG', 'SP' ]
+#apps = [ 'AMG' , 'CoMD', 'HPCCG-1.0', 'lulesh', 'XSBench', 'miniFE', 'BT', 'CG', 'DC', 'EP', 'FT', 'LU', 'MG', 'SP', 'UA' ]
+apps = [ 'AMG' , 'CoMD', 'HPCCG-1.0', 'lulesh', 'XSBench', 'miniFE', 'BT', 'CG', 'DC', 'EP', 'FT', 'LU', 'MG', 'SP' ]
 inputs = [ 'test', 'small', 'large' ]
 configs = [ 'serial', 'omp' ]
 
