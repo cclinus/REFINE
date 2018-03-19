@@ -4,8 +4,8 @@ import sys
 #Programs
 ## XXX: IS is very short running and it has no output to verify
 # TODO: FIX UA, RE-RUN UA experiments for small input, changed to A. Possible large too because removing
-#apps = [ 'AMG' , 'CoMD', 'HPCCG-1.0', 'lulesh', 'XSBench', 'miniFE', 'BT', 'CG', 'DC', 'EP', 'FT', 'LU', 'MG', 'SP', 'UA' ]
-apps = [ 'AMG' , 'CoMD', 'HPCCG-1.0', 'lulesh', 'XSBench', 'miniFE', 'BT', 'CG', 'DC', 'EP', 'FT', 'LU', 'MG', 'SP' ]
+apps = [ 'AMG' , 'CoMD', 'HPCCG-1.0', 'lulesh', 'XSBench', 'miniFE', 'BT', 'CG', 'DC', 'EP', 'FT', 'LU', 'MG', 'SP', 'UA' ]
+#apps = [ 'AMG' , 'CoMD', 'HPCCG-1.0', 'lulesh', 'XSBench', 'miniFE', 'BT', 'CG', 'DC', 'EP', 'FT', 'LU', 'MG', 'SP' ]
 inputs = [ 'test', 'small', 'large' ]
 configs = [ 'serial', 'omp' ]
 
@@ -15,8 +15,7 @@ NASDIR_OMP = 'NPB3.3-OMP-C/'
 
 # FP formats for verifying
 #FLOAT = r'[+-]?\d+\.(?:\d+|\d+[Ee][+-]?\d+)'
-FLOAT = r'[+-]?\d+\.(?:\d+|\d+[Ee][+-]?\d+)'
-#FLOAT = r'[+-]?\d+\.\d+'
+FLOAT = r'[+-]?\d+\.\d+(?:[Ee][+-]?\d+)?'
 
 # builddir: where to run make
 # rundir: where to run experiments
@@ -123,9 +122,9 @@ programs = {
             },
             'clean' : '',
             'verify' : {
-                'test' :['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
-                'small':['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
-                'large':['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
+                'test' :['\d\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT],
+                'small':['\d\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT],
+                'large':['\d\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT],
             }
         },
         'CG': {
@@ -205,9 +204,9 @@ programs = {
             },
             'clean' : '',
             'verify' : {
-                'test' : ['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, '\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
-                'small': ['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, '\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
-                'large': ['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, '\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
+                'test' : ['\d?\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT],
+                'small': ['\d?\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT],
+                'large': ['\d?\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT],
             }
         },
         'MG': {
@@ -234,9 +233,9 @@ programs = {
             },
             'clean' : '',
             'verify' : {
-                'test' :['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
-                'small':['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
-                'large':['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
+                'test' :['\d\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT],
+                'small':['\d\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT],
+                'large':['\d\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT],
             }
         },
         'UA': {
@@ -248,9 +247,9 @@ programs = {
             },
             'clean' : '',
             'verify' : {
-                'test' :['\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
-                'small':['\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
-                'large':['\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
+                'test' :['\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT, ],
+                'small':['\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT, ],
+                'large':['\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT, ],
             }
         }
     },
@@ -355,9 +354,9 @@ programs = {
             },
             'clean' : '',
             'verify' : {
-                'test' :['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
-                'small':['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
-                'large':['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
+                'test' :['\d\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT],
+                'small':['\d\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT],
+                'large':['\d\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT],
             }
         },
         'CG': {
@@ -437,9 +436,9 @@ programs = {
             },
             'clean' : '',
             'verify' : {
-                'test' : ['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, '\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
-                'small': ['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, '\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
-                'large': ['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, '\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
+                'test' : ['\d?\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT],
+                'small': ['\d?\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT],
+                'large': ['\d?\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT],
             }
         },
         'MG': {
@@ -465,9 +464,9 @@ programs = {
             },
             'clean' : '',
             'verify' : {
-                'test' :['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
-                'small':['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
-                'large':['\d\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT],
+                'test' :['\d\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT],
+                'small':['\d\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT],
+                'large':['\d\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT],
             }
         },
         'UA': {
@@ -479,9 +478,9 @@ programs = {
             },
             'clean' : '',
             'verify' : {
-                'test' :['\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
-                'small':['\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
-                'large':['\s+' + FLOAT +' ' + FLOAT + ' ' + FLOAT, ],
+                'test' :['\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT, ],
+                'small':['\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT, ],
+                'large':['\s+(' + FLOAT +') ' + FLOAT + ' ' + FLOAT, ],
             }
         }
     }
