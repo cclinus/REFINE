@@ -101,9 +101,9 @@ programs = {
         'miniFE' : {
             'builddir':'miniFE/ref/src/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
             'exec' : {
-                'test'  : ['/miniFE/ref/src/miniFE.x','-nx','16','-ny','16','-nz','16'],
-                'small' : ['/miniFE/ref/src/miniFE.x','-nx','64','-ny','64','-nz','64'],
-                'large' : ['/miniFE/ref/src/miniFE.x','-nx','256','-ny','256','-nz','256'],
+                'test'  : ['/miniFE/ref/src/miniFE.x','-nx','16','-ny','16','-nz','16','-verify_solution','1'],
+                'small' : ['/miniFE/ref/src/miniFE.x','-nx','64','-ny','64','-nz','64','-verify_solution','1'],
+                'large' : ['/miniFE/ref/src/miniFE.x','-nx','256','-ny','256','-nz','256','-verify_solution','1'],
             },
             'clean' : '/bin/rm -rf miniFE*yaml',
             'verify' : {
@@ -333,9 +333,9 @@ programs = {
         'miniFE' : {
             'builddir':'miniFE/openmp-opt/src/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
             'exec' : {
-                'test'  : ['/miniFE/openmp-opt/src/miniFE.x','-nx','16','-ny','16','-nz','16'],
-                'small' : ['/miniFE/openmp-opt/src/miniFE.x','-nx','64','-ny','64','-nz','64'],
-                'large' : ['/miniFE/openmp-opt/src/miniFE.x','-nx','256','-ny','256','-nz','256'],
+                'test'  : ['/miniFE/openmp-opt/src/miniFE.x','-nx','16','-ny','16','-nz','16','-verify_solution','1'],
+                'small' : ['/miniFE/openmp-opt/src/miniFE.x','-nx','64','-ny','64','-nz','64','-verify_solution','1'],
+                'large' : ['/miniFE/openmp-opt/src/miniFE.x','-nx','256','-ny','256','-nz','256','-verify_solution','1'],
             },
             'clean' : '/bin/rm -rf miniFE*yaml',
             'verify' : {

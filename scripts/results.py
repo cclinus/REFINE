@@ -8,6 +8,7 @@ import itertools
 import re
 import numpy as np
 import time
+import analysis
 
 import data
 import fi_tools
@@ -52,68 +53,5 @@ else: # serial
     instrument = ''
 
 for app in args.apps:
-    print('===== APP ' + app + '  =====')
-    timeout = crash = soc = benign = 0
-    # base app dir
-    rootdir = '%s/%s/%s/'%(args.resdir, 'golden', config)
-    # specific trial dir
-    profiledir = '%s/%s/profile/%s/%s/'%(rootdir, app, nthreads, args.input)
-
-    # Use the first experiment on golden to get the valid output
-    # TODO: check whether outputs with omp may differ but still valid
-    trialdir = profiledir + '1/'
-
-    verify_list = []
-    with open(trialdir + 'output.txt', 'r') as f:
-        for v in data.programs[config][app]['verify'][args.input]:
-            #print(v)
-            m = re.findall(v, f.read())
-            verify_list += m
-    #print(verify_list)
-    assert verify_list, 'verify_list cannot be empty'
-
-    # XXX: replacements
-    basedir = '%s/%s/%s/%s/%s/%s/%s/%s/'%(args.resdir, args.tool, config, app, args.action, instrument, nthreads, args.input)
-
-    for trial in range(args.start, args.end+1):
-        trialdir = '%s/%s/'%( basedir, trial )
-        with open(trialdir + 'ret.txt', 'r') as retf:
-            res = retf.read()
-            res = res.strip().split(',')
-            if res[0] == 'timeout':
-                timeout += 1
-            elif res[0] == 'crash':
-                crash += 1
-            elif res[0] == 'error':
-                crash += 1
-            elif res[0] == 'exit':
-                with open(trialdir + '/' + 'output.txt', 'r') as f:
-                    #print('open: ' + trialdir +'/' + 'output.txt')
-                    verify_out = []
-                    for v in data.programs[config][app]['verify'][args.input]:
-                        m = re.findall(v, f.read())
-                        verify_out += m
-                    verified = True
-                    for out in verify_list:
-                        if not out in verify_out:
-                            verified = False
-                            break
-                    if args.verbose:
-                        print('*** verify ***')
-                        print(verify_list)
-                        print(verify_out)
-                        print('trial %d verified: %s'%(trial, verified))
-                        print('*** end verify ***')
-                    if verified:
-                        benign += 1
-                    else:
-                        soc += 1
-                        #TODO: extend verifier with tolerance
-                    #print('\ttimeout: ' + str(timeout) + ', crash: ' + str(crash) + ', soc: ' + str(soc) + ', benign: ' + str(benign))
-            else:
-                print('Invalid result ' + args.tool + ' ' + app + ' ' + str(trial) +' :' + str(res[0]))
-
-    print('\ttimeout: ' + str(timeout) + ', crash: ' + str(crash) + ', soc: ' + str(soc) + ', benign: ' + str(benign))
-    total = args.end - args.start + 1
-    print('\t(%%) timeout %3.2f, crash %3.2f, soc %3.2f, benign %3.2f'%(timeout*100.0/total, crash*100.0/total, soc*100.0/total, benign*100.0/total) )
-    print('===== END APP ' + app +' =====\n');
+    #def results(resdir, tool, config, app, action, instrument, nthreads, inputsize, start, end, verbose):
+    analysis.results(args.resdir, args.tool, config, app, args.action, instrument, nthreads, args.input, args.start, args.end, args.verbose)

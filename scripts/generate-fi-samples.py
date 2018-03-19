@@ -26,7 +26,7 @@ def parse_profile(basedir, tool, config, nthreads, input_size, start, end):
         trialdir = '%s/%s/'%(basedir, trial)
         fname = trialdir + fi_tools.files[tool]['inscount']
         # read instruction count
-        #print('fname %s'%(fname))
+        print('fname %s'%(fname))
         with open(fname, 'r') as f:
             fdata = f.read()
             #print(data)
@@ -48,14 +48,14 @@ def parse_profile(basedir, tool, config, nthreads, input_size, start, end):
     s_inscount = np.std(inscount)
     m_thread_inscount = []
     if config == 'omp':
-        print( thread_inscount ) # ggout
+        #print( thread_inscount ) # ggout
         for i in range( 0, int(nthreads) ):
             m_thread_inscount.append( (i, int(np.mean( thread_inscount[i] ) )) )
     m_time = np.mean(xtime)
 
     # create mean_time.txt for setting the timeout
     fname = '%s/mean_time.txt'%(basedir)
-    print(fname)
+    #print(fname)
     with open(fname, 'w') as f:
         f.write( '%.2f\n'%(m_time) )
 
@@ -132,7 +132,7 @@ def main():
             nthreads = args.config[1]
             assert int(nthreads) > 0, 'nthreads must be > 0'
             instrument=''
-        else: # refine or pinfi
+        else: # refine or pinfi or refine-noff
             assert len(args.config) == 3, 'Config: omp <nthreads> <all | app | omplib>'
             nthreads = args.config[1]
             instrument = args.config[2]
@@ -152,7 +152,7 @@ def main():
         if m_thread_inscount:
             print('mean inst. per thread')
             print(m_thread_inscount)
-        print('mean inscount %d std %d'%(m_inscount, s_inscount) )
+        print('mean inscount %d std %.2f%%'%(m_inscount, s_inscount*100.0/m_inscount) )
         print('mean time %.2f'%(m_time) )
 
         if args.generate :

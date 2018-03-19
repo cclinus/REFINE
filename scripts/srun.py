@@ -18,7 +18,7 @@ except:
     print('Env variable HOME is missing')
     sys.exit(1)
 
-parser = argparse.ArgumentParser('Run profiling experiments')
+parser = argparse.ArgumentParser('Srun old script')
 parser.add_argument('-d', '--appdir', help='applications root directory', required=True)
 parser.add_argument('-r', '--resdir', help='results directory', required=True)
 parser.add_argument('-n', '--nodes', help='number of nodes', type=int, required=True)
@@ -64,110 +64,134 @@ else: # serial
     nthreads = ''
     instrument = ''
 
-def chunkify(lst, n):
-    # Break in n chunks
-    chunks = [ lst[i::n] for i in range(n)]
-    # Return cleaned-up from empty sub-chunks
-    return [c for c in chunks if c]
+def srun(chunk):
+    runargs = []
+    ## Setup the env
+    if config == 'omp':
+        runargs += [ '-e', 'OMP_NUM_THREADS', nthreads ]
+        if int(nthreads) > 1:
+            runargs += [ '-e', 'KMP_AFFINITY' , 'compact' ]
+    if args.tool == 'refine':
+        if instrument == 'all' or instrument == 'omplib':
+            runargs += [ '-e', 'LD_LIBRARY_PATH', homedir + '/usr/local/refine/lib:' + homedir + '/usr/local/lib' ]
 
-def run_batch(exps):
+    for i in chunk:
+        runargs += i
+    runlist=['./run.py'] + ['-w', str(args.workers)] + runargs
+    print(runlist)
+    sys.exit(124)
+    if args.partition  == 'echo':
+        p = subprocess.Popen(['echo'] + runlist)
+    elif args.partition in ['debug','batch']:
+        p = subprocess.Popen(['srun', '-N', '1', '-pp' + args.partition] + runlist)
+    elif args.partition == 'local':
+        p = subprocess.Popen(runlist)
+    else:
+        print('Invalid execution partition ' + args.partition)
+
+    return p
+
+def progress(t, total, completed, rate, unit, start, end):
+    frac = completed/total
+    full_progbar = 50
+    filled_progbar = round(frac * full_progbar)
+
+    m, s = divmod(t, 60)
+    h, m = divmod(m, 60)
+
+    rate = round(rate, 2)
+
+    if rate > 0:
+        e_s = (total - completed) / rate 
+        e_m, e_s = divmod(e_s, 60)
+        e_h, e_m = divmod(e_m, 60)
+    else:
+        e_h = e_m = e_s = 0
+
+    print('%s'%(start),'Status %5d / %5d'%(completed, total)
+        , '#'*filled_progbar + '-'*(full_progbar - filled_progbar)
+        , '[{:>7.2%}]'.format(frac)
+        , '| %3.2f exps/%s'%(rate, unit)
+        , '| Elapsed %2d:%02d:%02d' % (h, m, s)
+        , '| Est. remaining %2d:%02d:%02d' % (e_h, e_m, e_s)
+        , end='%s'%(end))
+
+def get_chunk(it, chunksize):
+    chunk = []
+    for j in range(0, chunksize):
+        e = next(it, None)
+        if(e):
+            chunk.append(e)
+    return chunk
+
+def run_batch(exps, chunksize):
     jobs = []
-    batches = chunkify(exps, args.nodes)
-    for i, batch in enumerate(batches, 1):
-        # Flatten batch to pass as argument
-        runargs = [j for b in batch for j in b]
-        #print("==== runargs ===")
-        #print(runargs)
-        #print("==== end runargs ====")
-        # Create unique job id for workers to update progress
-        jobid = '%d.%d'%(os.getpid(), i)
-        if args.verbose:
-            print('jobid ' + jobid) # ggout
-        # Touch file
-        with open(jobid + '.log', 'w') as f:
-            f.write('0\n')
-        runlist=['./run.py'] + ['-j', jobid, '-w', str(args.workers)] + runargs
-        #print(runlist)
+    it = iter(exps)
+    total = len(exps)
+    completed = 0
+    for i in range(0, args.nodes):
+        chunk = get_chunk(it, chunksize)
+        if chunk:
+            # append process and its chunksize to track progress
+            jobs.append( (srun(chunk), len(chunk)) )
+            
+    t = 1
+    avg_rate = 0
+    last_completed = 0
+    win_t = 30
 
-        if args.partition  == 'echo':
-            p = subprocess.Popen(['echo'] + runlist)
-        elif args.partition in ['debug','batch']:
-            if args.partition == 'debug':
-                p = subprocess.Popen(['srun', '-N', '1', '-pp' + args.partition] + runlist)
-            else:
-                outf = open('srun-' + args.tool + '-' + str(args.start) + '-' + str(args.end) + '-' + str(i) + '.out', 'w')
-                errf = open('srun-' + args.tool + '-' + str(args.start) + '-' + str(args.end) + '-' + str(i) + '.err', 'w')
-                p = subprocess.Popen(['srun', '-N', '1', '-pp' + args.partition] + runlist, stdout = outf, stderr = errf)
-        elif args.partition == 'local':
-            p = subprocess.Popen(runlist)
-        else:
-            print('Invalid execution partition ' + args.partition)
-        jobs.append({'proc': p, 'jobid':jobid})
-
-    if args.partition != 'echo':
-        try:
-            # Keeps time
-            t = 1
-            avg_rate = 0
-            last_completed = 0
-            win_t = 10
-            while True:
-                completed = 0
-                total = len(exps)
-                for j in jobs:
-                    try:
-                        with open(j['jobid']+'.log', 'r') as f:
-                            completed += int( f.read() )
-                    # ignore concurrent write problems
-                    except ValueError:
-                        continue
-                #print('completed %d total %d'%(completed, total) )
-                frac = completed/total
-                full_progbar = 50
-                filled_progbar = round(frac * full_progbar)
-                rate = round( avg_rate, 2 )
-
-                m, s = divmod(t, 60)
-                h, m = divmod(m, 60)
-
-                if rate > 0:
-                    e_s = (total - completed) / rate 
-                    e_m, e_s = divmod(e_s, 60)
-                    e_h, e_m = divmod(e_m, 60)
+    try:
+        while completed < total:
+            #print(jobs)
+            #print('completed %s total %s'%(completed, total) )
+            newjobs = []
+            for p, n in jobs:
+                ret = p.poll()
+                #print('ret %s'%(ret) )
+                if ret != None:
+                    if ret != 0:
+                        print('Error %s'%(ret) )
+                    completed += n
+                    chunk = get_chunk(it, chunksize)
+                    if chunk:
+                        newjobs.append( (srun(chunk), len(chunk)) )
                 else:
-                    e_h = e_m = e_s = 0
+                    newjobs.append( (p, n) )
 
-                print('\r','Status %5d / %5d'%(completed, total)
-                        , '#'*filled_progbar + '-'*(full_progbar - filled_progbar)
-                        , '[{:>7.2%}]'.format(frac)
-                        , '| %3.2f exps/s'%(rate)
-                        , '| Elapsed %2d:%02d:%02d' % (h, m, s)
-                        , '| Est. remaining %2d:%02d:%02d' % (e_h, e_m, e_s)
-                        , end='')
-                if completed >= total:
-                    break
-                time.sleep(1)
-                t += 1
-                if t % win_t == 0:
-                    avg_rate = 0.5 * ( ( completed - last_completed ) / win_t ) + 0.5 * avg_rate
-                    last_completed = completed
-        except KeyboardInterrupt:
-            for j in jobs:
-                j['proc'].terminate()
-        print( '\nTotal rate %3.2f exps/s'%( completed / t ) )
-        with open('%s-%s-%s-%s-%s-%s.txt'%(args.tool, config, args.action, instrument, nthreads, args.input), 'w') as f:
-            f.write(str(t) + ' seconds\n')
+            jobs = newjobs
+
+            # per second progress printed in stdout
+            if args.partition == 'local' or args.partition == 'debug':
+                progress(t, total, completed, avg_rate, 's', '\r', '')
+            else: # per min progress printed in file
+                if t == 1 or t % 60 == 0:
+                    # per min rate
+                    progress(t, total, completed, avg_rate*60, 'min', '', '\n')
+                                
+            time.sleep(1)
+
+            t += 1
+            if t % win_t == 0:
+                avg_rate = 0.5 * ( ( completed - last_completed ) / win_t ) + 0.5 * avg_rate
+                last_completed = completed
+    except KeyboardInterrupt:
+        for p, n in jobs:
+            p.terminate()
+            p.wait()
+        sys.exit(1)
+
+    progress(t, total, completed, (completed*60) / t, 'min', '', '\n')
     
-    for j in jobs:
-        if j['proc'].wait() != 0:
-            print( 'Error in job: ' + j['jobid'] )
+    with open('%s-%s-%s-%s-%s-%s.txt'%(args.tool, config, args.action, instrument, nthreads, args.input), 'w') as f:
+        f.write(str(t) + ' seconds\n')
+    
+    for p, n in jobs:
+        ret = p.wait()
+        if ret != 0:
+            print( 'Error %s in job'%(ret) )
 
-    print('Removing log files...')
-    # Remove log files
-    for j in jobs:
-        os.remove(j['jobid']+'.log')
-
-print( 'Experiment: %s %s %s %s %s %s %s'%( args.tool, config, ' '.join(args.apps), args.action, instrument, nthreads, args.input) )
+print('==== EXPERIMENT ====')
+print( 'Experiment: %s %s %s %s %s %s %s %s %s'%( args.tool, config, ' '.join(args.apps), args.action, instrument, nthreads, args.input, args.start, args.end) )
 # Create fault injection experiment tuples
 exps = []
 for app in args.apps:
@@ -180,13 +204,14 @@ for app in args.apps:
         with open(fname, 'r') as f:
             timeout = float( f.read() )
         # XXX: PINFI instruction counts BB, but faultinjections is INS! Use a large timeout
-        print('Read mean profiling time: %.2f, setting timeout 20x:  %.2f'%(timeout, timeout*20) )
+        #print('Read mean profiling time: %.2f, setting timeout 20x:  %.2f'%(timeout, timeout*20) )
         timeout = round(20 * timeout, 2)
 
     for trial in range(args.start, args.end+1):
         trialdir = basedir + '/' + str(trial) +'/'
         #print(trialdir)
         # Skip already done experiments
+        #print('CHECK to skip %s/ret.txt'%(trialdir) )
         if os.path.isfile(trialdir+'/ret.txt'):
             continue
 
@@ -234,30 +259,25 @@ for app in args.apps:
         exelist = [ s.replace( '$APPDIR', '%s/%s'%(rootdir, app) ) for s in data.programs[config][app]['exec'][args.input] ]
         # XXX: replace NTHREADS, needed only for XSBench omp
         exelist = [ s.replace( '$NTHREADS', nthreads ) for s in exelist ]
-        # XXX: note using rootdir, program binary in data is relative to that
+        # XXX: note using rootdir, program binary is relative to that
         exelist = fi_exelist + [ rootdir + exelist[0] ] + exelist[1:]
         exelist = ' '.join(exelist)
         #print('\nexelist< %s >\n'%(exelist))
-
-        ## Setup the env
-        runenv = []
-        if config == 'omp':
-            runenv += [ '-e', 'OMP_NUM_THREADS', nthreads, '-e', 'KMP_AFFINITY', 'compact,verbose' ]
-        if args.tool == 'refine':
-            if instrument == 'all' or instrument == 'omplib':
-                runenv += [ '-e', 'LD_LIBRARY_PATH', homedir + '/usr/local/refine/lib:' + homedir + '/usr/local/lib' ]
+        # XXX: add cleanup to avoid disk space problems
+        cleanlist = data.programs[config][app]['clean']
 
         ## Append to experiments (must be string list)
-        exps.append( runenv + ['-r', trialdir, str(timeout), exelist] )
+        exps.append( ['-r', trialdir, str(timeout), exelist, cleanlist] )
         if args.verbose:
-            print(runenv + ['-r', trialdir, str(timeout), exelist])
+            print(['-r', trialdir, str(timeout), exelist])
         #sys.exit(123)
-#print("==== experiments ====")
-#print(exps)
-#print("==== end experimetns ====")
+print("==== experiments ====")
+print(exps)
+print("==== end experiments ====") # ggout
 print('Nof exps: %d'%( len(exps) ) )
 if(exps):
-    run_batch(exps)
+    run_batch(exps, args.workers)
 
 print('\nExiting bye-bye')
+print('==== END EXPERIMENT ====')
 
