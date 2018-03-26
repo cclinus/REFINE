@@ -54,7 +54,7 @@ def build(action, repeat, workdir, args):
 parser = argparse.ArgumentParser('Build applications for tools and their configurations')
 # tuple of 3: (tool, app, iter)
 parser.add_argument('-d', '--appdir', help='application directory', required=True)
-parser.add_argument('-t', '--tools', help='tool to build', choices=['golden','refine','refine-noff'], nargs='+', required=True)
+parser.add_argument('-t', '--tools', help='tool to build', choices=['golden','safire','refine'], nargs='+', required=True)
 parser.add_argument('-c', '--configs', help='configuration to build', choices=['serial','omp'], nargs='+', required=True)
 parser.add_argument('-a', '--apps', help='applications to build ( ' + ' | '.join(data.apps) + ' | ALL ) ', nargs='+', required=True)
 parser.add_argument('-i', '--inputs', help='inputs to build for (' + ' | '.join(data.inputs) + ' )', nargs='+', required=True)

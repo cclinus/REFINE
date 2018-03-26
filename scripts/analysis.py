@@ -3,7 +3,7 @@ import re
 import data
 import fi_tools
 
-def results(resdir, tool, config, app, action, instrument, nthreads, inputsize, start, end, verbose):
+def results(resdir, tool, config, wait, app, action, instrument, nthreads, inputsize, start, end, verbose):
     print('===== APP %s %s %s %s %s %s %s %s %s  ====='%(app, tool, config, action, instrument, nthreads, inputsize, start, end) )
     missing = timeout = crash = soc = benign = 0
     # base app dir
@@ -24,8 +24,7 @@ def results(resdir, tool, config, app, action, instrument, nthreads, inputsize, 
     #print(verify_list)
     assert verify_list, 'verify_list cannot be empty file: ' + trialdir + 'output.txt' + ', verify:' + ' '.join(data.programs[config][app]['verify'][inputsize])
 
-    # XXX: replacements
-    basedir = '%s/%s/%s/%s/%s/%s/%s/%s/'%(resdir, tool, config, app, action, instrument, nthreads, inputsize)
+    basedir = '%s/%s/%s/%s/%s/%s/%s/%s/%s/'%(resdir, tool, config, wait, app, action, instrument, nthreads, inputsize)
 
     for trial in range(start, end+1):
         trialdir = '%s/%s/'%( basedir, trial )

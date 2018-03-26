@@ -8,6 +8,7 @@ import numpy as np
 import random
 from collections import Counter
 from bashplotlib.histogram import plot_hist 
+import itertools
 
 
 import data
@@ -26,7 +27,7 @@ def parse_profile(basedir, tool, config, nthreads, input_size, start, end):
         trialdir = '%s/%s/'%(basedir, trial)
         fname = trialdir + fi_tools.files[tool]['inscount']
         # read instruction count
-        print('fname %s'%(fname))
+        #print('fname %s'%(fname))
         with open(fname, 'r') as f:
             fdata = f.read()
             #print(data)
@@ -100,19 +101,23 @@ def write_fi_files(basedir, tool, config, samples, m_thread_inscount):
     if fi_threads:
         print(Counter(fi_threads).keys())
         print(Counter(fi_threads).values())
+        print(nthreads)
         plot_hist(fi_threads, title='Thread distro', bincount=100, xlab=True)
 
 def main():
     parser = argparse.ArgumentParser('Generate FI samples')
     parser.add_argument('-r', '--resdir', help='results directory', required=True)
-    parser.add_argument('-t', '--tool', help='tool to run', choices=['refine', 'pinfi', 'refine-noff'], required=True)
+    parser.add_argument('-o', '--outdir', help='output directory', required=True)
+    parser.add_argument('-t', '--tool', help='tool to run', choices=['safire', 'refine', 'pinfi', 'pinfi-detach' ], required=True)
     parser.add_argument('-a', '--apps', help='applications to run ( ' + ' | '.join(data.apps) + ' | ALL ) ', nargs='+', required=True)
-    parser.add_argument('-c', '--config', help='run configuration \n <serial | omp> <nthreads> [all | app | omplib])', nargs='+', required=True)
+    parser.add_argument('-c', '--config', help='run configuration \n <serial | omp> <nthreads> <all | app | omplib>)', nargs='+', required=True)
     parser.add_argument('-i', '--input', help='input size', choices=['test', 'small', 'large'], required=True)
     parser.add_argument('-ps', '--pstart', help='profiling start', type=int, required=True)
     parser.add_argument('-pe', '--pend', help='profilng end', type=int, required=True)
     parser.add_argument('-g', '--generate', help='generate FI samples', action='store_true')
     parser.add_argument('-n', '--nsamples', help='number of FI samples', type=int, required=True)
+    parser.add_argument('-tt', '--targetthreads', help='threads to target', type=int, nargs='+')
+    parser.add_argument('-w', '--wait', help='wait policy', choices=['passive', 'active', ''], required=True)
     args = parser.parse_args()
 
     # Error checking
@@ -124,15 +129,15 @@ def main():
             assert a in data.apps, 'Application: ' + a + ' is invalid'
     assert args.pstart <= args.pend, 'Start must be < end'
     assert args.config[0] in ['serial', 'omp']
-
     config = args.config[0]
+
     if config == 'omp':
         if args.tool == 'golden':
             assert len(args.config) == 2, 'Golden config: omp <nthreads>'
             nthreads = args.config[1]
             assert int(nthreads) > 0, 'nthreads must be > 0'
             instrument=''
-        else: # refine or pinfi or refine-noff
+        else: # safire, refine or pinfi
             assert len(args.config) == 3, 'Config: omp <nthreads> <all | app | omplib>'
             nthreads = args.config[1]
             instrument = args.config[2]
@@ -142,11 +147,14 @@ def main():
         assert len(args.config) == 1, 'Serial config has no other argument'
         nthreads = ''
         instrument = ''
+
+    if args.targetthreads and not config == 'omp':
+        parser_error('targetthreads can be used only in omp configuration')
     assert args.nsamples > 0, 'Number of FI samples must be > 0'
-    
+
     # Generate random samples and fi files
     for app in args.apps:
-        profiledir = '%s/%s/%s/%s/%s/%s/%s/%s'%(args.resdir, args.tool, config, app, 'profile', instrument, nthreads, args.input)
+        profiledir = '%s/%s/%s/%s/%s/%s/%s/%s/%s'%(args.resdir, args.tool, config, args.wait, app, 'profile', instrument, nthreads, args.input)
 
         m_time, m_inscount, s_inscount, m_thread_inscount = parse_profile(profiledir, args.tool, config, nthreads, args.input, args.pstart, args.pend)
         if m_thread_inscount:
@@ -157,10 +165,29 @@ def main():
 
         if args.generate :
             # create fi samples
-            samples = random.sample(range(1, m_inscount+1), args.nsamples)
+            if args.targetthreads:
+                print(args.targetthreads)
+                all_sum_inscount = 0
+                sum_inscount = 0
+                mapping = []
+                # iterate threads and linearize over selected ones
+                for thread, inscount in m_thread_inscount:
+                    if thread in args.targetthreads:
+                        mapping.append( (sum_inscount+1, sum_inscount + inscount, all_sum_inscount - sum_inscount) )
+                        sum_inscount += inscount
+                    all_sum_inscount += inscount
 
-            # XXX replace profle -> fi
-            fidir = '%s/%s/%s/%s/%s/%s/%s/%s'%(args.resdir, args.tool, config, app, 'fi', instrument, nthreads, args.input)
+                samples = random.sample( range(1, sum_inscount+1), args.nsamples)
+                # re-map samples to original order
+                for i, s in enumerate( samples ):
+                    for first, last, offset in mapping:
+                        if first <= s and s <= last:
+                            samples[i] = s + offset
+                            break
+            else:
+                samples = random.sample(range(1, m_inscount+1), args.nsamples)
+
+            fidir = '%s/%s/%s/%s/%s/%s/%s/%s/%s'%(args.resdir, args.tool, config, args.wait, app, args.outdir, instrument, nthreads, args.input)
             
             write_fi_files(fidir, args.tool, config, samples, m_thread_inscount)
 

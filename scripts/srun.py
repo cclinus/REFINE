@@ -25,21 +25,24 @@ except:
     sys.exit(1)
 
 
-def srun(partition, nworkers, env, chunk):
+def srun(partition, ntasks, env, chunk):
     runargs = []
     if env:
         for e in env:
             runargs += [ '-e', e[0], e[1] ]
     
+    # XXX: cycle tasks (corresponding to SLURM_PROCID) to max utilization
+    task = 0
     for i in chunk:
-        runargs += ['-r'] + i
-    runlist=[scriptdir + '/run.py'] + ['-w', str(nworkers)] + runargs
-    #print(runlist)
+        runargs += ['-r', '%s'%(task) ] + i
+        task = (task+1) % ntasks
+    runlist=[scriptdir + '/run.py'] + runargs
     #print('srun [%s]'%(', '.join(runlist) ) )
     if partition  == 'echo':
         p = subprocess.Popen(['echo'] + runlist)
     elif partition in ['debug','batch']:
-        p = subprocess.Popen(['srun', '-N', '1', '-pp' + partition] + runlist)
+        # XXX: Note -W 0 is NEEDED. Otherwise, slurm will kill the job if a task exists
+        p = subprocess.Popen(['srun', '-W', '-0', '-N', '1', '-n', '%s'%( ntasks ), '-pp' + partition] + runlist )
     elif partition == 'local':
         p = subprocess.Popen(runlist)
     else:
@@ -82,16 +85,16 @@ def get_chunk(it, chunksize):
             chunk.append(e)
     return chunk
 
-def run_batch(nodes, partition, nworkers, env, exps, chunksize):
+def run_batch(nodes, partition, ntasks, env, exps):
     jobs = []
     it = iter(exps)
     total = len(exps)
     completed = 0
     for i in range(0, nodes):
-        chunk = get_chunk(it, chunksize)
+        chunk = get_chunk(it, ntasks)
         if chunk:
             # append process and its chunksize to track progress
-            jobs.append( (srun(partition, nworkers, env, chunk), len(chunk)) )
+            jobs.append( (srun(partition, ntasks, env, chunk), len(chunk)) )
             
     t = 1
     avg_rate = 0
@@ -110,9 +113,9 @@ def run_batch(nodes, partition, nworkers, env, exps, chunksize):
                     if ret != 0:
                         print('Error %s'%(ret) )
                     completed += n
-                    chunk = get_chunk(it, chunksize)
+                    chunk = get_chunk(it, ntasks)
                     if chunk:
-                        newjobs.append( (srun(partition, nworkers, env, chunk), len(chunk)) )
+                        newjobs.append( (srun(partition, ntasks, env, chunk), len(chunk)) )
                 else:
                     newjobs.append( (p, n) )
 
@@ -148,9 +151,9 @@ def run_batch(nodes, partition, nworkers, env, exps, chunksize):
 
 def main():
     parser = argparse.ArgumentParser('Srun new script')
-    parser.add_argument('-n', '--nodes', help='number of nodes', type=int, required=True)
+    parser.add_argument('-N', '--nodes', help='number of nodes', type=int, required=True)
     parser.add_argument('-p', '--partition', help='partition to run experiments', choices=['echo', 'local', 'debug', 'batch' ], required=True)
-    parser.add_argument('-w', '--workers', help='number of workers', type=int, required=True)
+    parser.add_argument('-n', '--tasks', help='number of tasks', type=int, required=True)
     parser.add_argument('-v', '--verbose', help='verbose', default=False, action='store_true') 
     parser.add_argument('-e', '--env', help='environment variables to set', nargs=2, action='append')
     parser.add_argument('-r', '--runlist', help='list to run', nargs=4, action='append', required=True)
@@ -158,17 +161,15 @@ def main():
 
     # Error checking
     assert args.nodes > 0, 'Nodes arg must be > 0'
-    assert args.workers >= 0, 'Workers must be >= 0'
+    assert args.tasks >= 0, 'Number of tasks must be >= 0'
 
     exps = args.runlist
     #print("==== experiments ====")
     #print(exps)
     #print("==== end experiments ====")
     print('Nof exps: %d'%( len(exps) ) )
-    # XXX: chunksize equals to num of local workers, coarse if too much overhead
-    chunksize = args.workers
     if(exps):
-        run_batch(args.nodes, args.partition, args.workers, args.env, exps, args.workers)
+        run_batch(args.nodes, args.partition, args.tasks, args.env, exps)
 
     print('\nExiting bye-bye')
     print('==== END EXPERIMENT ====')

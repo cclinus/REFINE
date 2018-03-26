@@ -11,10 +11,11 @@ def main():
     parser = argparse.ArgumentParser('Run profiling experiments')
     parser.add_argument('-r', '--resdir', help='results directory', required=True)
     parser.add_argument('-a', '--apps', help='applications to run', choices=data.apps+['ALL'], nargs='+', required=True)
-    parser.add_argument('-t', '--tools', help='tool to run', choices=['refine', 'pinfi', 'refine-noff'], nargs='+', required=True)
+    parser.add_argument('-t', '--tools', help='tool to run', choices=['safire', 'refine', 'pinfi', 'pinfi-detach' ], nargs='+', required=True)
     parser.add_argument('-x', '--action', help='results for action', choices=['profile', 'fi'], required=True)
     parser.add_argument('-s', '--start', help='start trial', type=int, required=True)
     parser.add_argument('-e', '--end', help='end trial', type=int, required=True)
+    parser.add_argument('-w', '--wait', help='wait policy', choices=['passive', 'active', ''], required=True)
     args = parser.parse_args()
 
     # Error checking
@@ -52,7 +53,7 @@ def main():
 
                             if not os.path.isfile(fname):
                                 #def result(resdir, tool, config, app, action, instrument, nthreads, inputsize, start, end, verbose)
-                                analysis.results(args.resdir, t, c, a, args.action, ins, n, i, args.start, args.end, False)
+                                analysis.results(args.resdir, t, c, args.wait, a, args.action, ins, n, i, args.start, args.end, False)
 
 if __name__ == "__main__":
     main()

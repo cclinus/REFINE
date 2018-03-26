@@ -11,14 +11,16 @@ import argparse
 
 import data
 
-def error_cb(error):
-    traceback.format_exc()
+try:
+    SLURM_PROCID = os.environ['SLURM_PROCID']
+except:
+    print('Env variable SLURM_PROCID is missing')
+    sys.exit(1)
 
 parser = argparse.ArgumentParser('Run a list of experiment tuples')
 # tuple of 3: (trialdir, exelist str)
-parser.add_argument('-w', '--workers', help='number of workers', type=int, required=True)
 parser.add_argument('-e', '--env', help='environment variables to set', nargs=2, action='append')
-parser.add_argument('-r', '--runlist', help='list to run', nargs=4, action='append', required=True)
+parser.add_argument('-r', '--runlist', help='list to run', nargs=5, action='append', required=True)
 args = parser.parse_args()
 
 def run(e):
@@ -92,25 +94,7 @@ def run(e):
 
     #print('Profiling ' + ' '.join(e) + ' done')
 
-# Create pool of worker threads
-nworkers = args.workers
-#print('N workers %d'%(nworkers));
-#print(sys.argv)
-#print(args)
-#sys.exit(123)
-if nworkers <= 0:
-    nworkers = os.cpu_count()
 
-pool = mp.Pool( nworkers )
-
-
-# XXX: coarse grain chunking hurts load balancing, let defaults
-pool.map(run, args.runlist)#, chunksize=int( max( 1, len(args.runlist)/nworkers ) ) )
-
-pool.close()
-try:
-    pool.join()
-except KeyboardInterrupt:
-    pool.terminate()
-    pool.join()
-
+#pool.map(run, args.runlist)#, chunksize=int( max( 1, len(args.runlist)/nworkers ) ) )
+for r in [rr for rr in args.runlist if rr[0] == SLURM_PROCID]:
+    run(r[1:])
