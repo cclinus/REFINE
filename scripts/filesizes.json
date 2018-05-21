@@ -40,6 +40,9 @@
             "XSBench": {
                 "size": 29016
             },
+            "libomp": {
+                "size": 763403
+            },
             "lulesh": {
                 "size": 412906
             },
@@ -86,6 +89,9 @@
             },
             "XSBench": {
                 "size": 338648
+            },
+            "libomp": {
+                "size": 17241643
             },
             "lulesh": {
                 "size": 3678370
