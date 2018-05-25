@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import sys
 import argparse
 import re
 import os
@@ -53,6 +54,7 @@ def parse_profiles(resdir, tool, config, wait, app, instrument, nthreads, inputs
             except FileNotFoundError:
                 print('Missing %s'%( fname ) )
                 continue
+                #sys.exit(123)
 
         # read execution time
         fname = trialdir + 'time.txt'
@@ -107,34 +109,34 @@ def parse_profiles(resdir, tool, config, wait, app, instrument, nthreads, inputs
 
 
     
-def analyze_profiles(results, resdir, tools, apps, start, end):
-    # fi tools
-    for t in tools:
-        for c in config.data[t]['exec']:
-            for w in config.data[t][c]['wait']:
-                for a in apps:
-                    for i in config.data[t][c]['inputs']:
-                        for ins in config.data[t][c]['instrument']:
-                            for n in config.data[t][c][i]['nthreads']:
-                                #print('\r', '<%8s> Processing %8s %8s %8s %8s %5s %3s %6s' % ('profile', t, a, c, w, i, n, ins), end='' )
-                                print('<%8s> Processing %8s %8s %8s %8s %5s %3s %6s' % ('profile', t, a, c, w, i, n, ins) )
-                                profiledir = '%s/%s/%s/%s/%s/%s/%s/%s/%s'%(resdir, t, w, c, a, 'profile', ins, n, i)
-                                m_time, s_time, e_time, m_inscount, s_inscount, e_inscount, stats_thread_inscount = (
-                                        parse_profiles(resdir, t, c, w, a, ins, n, i, start, end) )
-
-                                results['profile'][t][w][a][c][i][n][ins]['time']['mean'] = m_time
-                                results['profile'][t][w][a][c][i][n][ins]['time']['std'] = s_time
-                                results['profile'][t][w][a][c][i][n][ins]['time']['sem'] = e_time
-
-                                results['profile'][t][w][a][c][i][n][ins]['inscount']['mean'] = m_inscount
-                                results['profile'][t][w][a][c][i][n][ins]['inscount']['std'] = s_inscount
-                                results['profile'][t][w][a][c][i][n][ins]['inscount']['sem'] = e_inscount
-                                if c == 'omp':
-                                    for j, [m, s, e] in enumerate( stats_thread_inscount ):
-                                       results['profile'][t][w][a][c][i][n][ins]['thread_inscount'][j]['mean'] = m
-                                       results['profile'][t][w][a][c][i][n][ins]['thread_inscount'][j]['std'] = s
-                                       results['profile'][t][w][a][c][i][n][ins]['thread_inscount'][j]['sem'] = e
-
+#def analyze_profiles(results, resdir, tools, apps, start, end):
+#    # fi tools
+#    for t in tools:
+#        for c in config.data[t]['exec']:
+#            for w in config.data[t][c]['wait']:
+#                for a in apps:
+#                    for i in config.data[t][c]['inputs']:
+#                        for ins in config.data[t][c]['instrument']:
+#                            for n in config.data[t][c][i]['nthreads']:
+#                                #print('\r', '<%8s> Processing %8s %8s %8s %8s %5s %3s %6s' % ('profile', t, a, c, w, i, n, ins), end='' )
+#                                print('<%8s> Processing %8s %8s %8s %8s %5s %3s %6s' % ('profile', t, a, c, w, i, n, ins) )
+#                                profiledir = '%s/%s/%s/%s/%s/%s/%s/%s/%s'%(resdir, t, w, c, a, 'profile', ins, n, i)
+#                                m_time, s_time, e_time, m_inscount, s_inscount, e_inscount, stats_thread_inscount = (
+#                                        parse_profiles(resdir, t, c, w, a, ins, n, i, start, end) )
+#
+#                                results['profile'][t][w][a][c][i][n][ins]['time']['mean'] = m_time
+#                                results['profile'][t][w][a][c][i][n][ins]['time']['std'] = s_time
+#                                results['profile'][t][w][a][c][i][n][ins]['time']['sem'] = e_time
+#
+#                                results['profile'][t][w][a][c][i][n][ins]['inscount']['mean'] = m_inscount
+#                                results['profile'][t][w][a][c][i][n][ins]['inscount']['std'] = s_inscount
+#                                results['profile'][t][w][a][c][i][n][ins]['inscount']['sem'] = e_inscount
+#                                if c == 'omp':
+#                                    for j, [m, s, e] in enumerate( stats_thread_inscount ):
+#                                       results['profile'][t][w][a][c][i][n][ins]['thread_inscount'][j]['mean'] = m
+#                                       results['profile'][t][w][a][c][i][n][ins]['thread_inscount'][j]['std'] = s
+#                                       results['profile'][t][w][a][c][i][n][ins]['thread_inscount'][j]['sem'] = e
+#
 # Parse fault injection files
 def parse_fi(resdir, tool, config, wait, app, action, instrument, nthreads, inputsize, start, end, verbose):
     print('===== APP %s %s %s %s %s %s %s %s %s  ====='%(app, tool, config, action, instrument, nthreads, inputsize, start, end) )
@@ -162,56 +164,61 @@ def parse_fi(resdir, tool, config, wait, app, action, instrument, nthreads, inpu
 
     xtime = []
     for trial in range(start, end+1):
+        print('\r','processing %d' % ( trial ), end='' ) # ggout
         trialdir = '%s/%s/'%( basedir, trial )
         try:
-            with open(trialdir + '/ret.txt', 'r') as f:
+            with open(trialdir + '/ret.txt', 'r'):
                 pass
         except FileNotFoundError:
             print('PENDING trialdir %s'%( trialdir ) )
             continue
+            #sys.exit(123)
         
         with open(trialdir + '/time.txt', 'r') as f:
             xtime.append( float( f.read() ) )
 
         with open(trialdir + '/ret.txt', 'r') as f:
-            if not os.path.isfile(trialdir + fi_tools.files[tool]['injection']):
+            #if not os.path.isfile(trialdir + fi_tools.files[tool]['injection']):
+            try:
+                with open(trialdir + fi_tools.files[tool]['injection'], 'r'):
+                    res = f.read()
+                    res = res.strip().split(',')
+                    if res[0] == 'timeout':
+                        timeout += 1
+                    elif res[0] == 'crash':
+                        crash += 1
+                    elif res[0] == 'error':
+                        crash += 1
+                    elif res[0] == 'exit':
+                        with open(trialdir + '/' + 'output.txt', 'r') as f:
+                            #print('open: ' + trialdir +'/' + 'output.txt')
+                            verify_out = []
+                            for v in data.programs[config][app]['verify'][inputsize]:
+                                m = re.findall(v, f.read())
+                                verify_out += m
+                            verified = True
+                            for out in verify_list:
+                                if not out in verify_out:
+                                    verified = False
+                                    break
+                            if verbose:
+                                print('*** verify ***')
+                                print(verify_list)
+                                print(verify_out)
+                                print('trial %d verified: %s'%(trial, verified))
+                                print('*** end verify ***')
+                            if verified:
+                                benign += 1
+                            else:
+                                soc += 1
+                                #TODO: extend verifier with tolerance
+                            #print('\ttimeout: ' + str(timeout) + ', crash: ' + str(crash) + ', soc: ' + str(soc) + ', benign: ' + str(benign))
+                    else:
+                        print('Invalid result ' + tool + ' ' + app + ' ' + str(trial) +' :' + str(res[0]))
+
+            except FileNotFoundError:
                 missing += 1
-            else:
-                res = f.read()
-                res = res.strip().split(',')
-                if res[0] == 'timeout':
-                    timeout += 1
-                elif res[0] == 'crash':
-                    crash += 1
-                elif res[0] == 'error':
-                    crash += 1
-                elif res[0] == 'exit':
-                    with open(trialdir + '/' + 'output.txt', 'r') as f:
-                        #print('open: ' + trialdir +'/' + 'output.txt')
-                        verify_out = []
-                        for v in data.programs[config][app]['verify'][inputsize]:
-                            m = re.findall(v, f.read())
-                            verify_out += m
-                        verified = True
-                        for out in verify_list:
-                            if not out in verify_out:
-                                verified = False
-                                break
-                        if verbose:
-                            print('*** verify ***')
-                            print(verify_list)
-                            print(verify_out)
-                            print('trial %d verified: %s'%(trial, verified))
-                            print('*** end verify ***')
-                        if verified:
-                            benign += 1
-                        else:
-                            soc += 1
-                            #TODO: extend verifier with tolerance
-                        #print('\ttimeout: ' + str(timeout) + ', crash: ' + str(crash) + ', soc: ' + str(soc) + ', benign: ' + str(benign))
-                else:
-                    print('Invalid result ' + tool + ' ' + app + ' ' + str(trial) +' :' + str(res[0]))
-    
+                
 
     print('\tmissing: ' + str(missing) + ', timeout: ' + str(timeout) + ', crash: ' + str(crash) + ', soc: ' + str(soc) + ', benign: ' + str(benign))
     total = end - start + 1
@@ -224,11 +231,39 @@ def parse_fi(resdir, tool, config, wait, app, action, instrument, nthreads, inpu
 
     return missing, timeout, crash, soc, benign, m_time, s_time, e_time
 
-def analyze_fi(results, resdir, tools, apps, start, end):
+#def analyze_fi(results, resdir, tools, apps, start, end):
+#    for t in tools:
+#        # XXX: skip fi analysis for golden, TODO: move that to config file
+#        if t == 'golden':
+#            continue
+#        for c in config.data[t]['exec']:
+#            for w in config.data[t][c]['wait']:
+#                for a in apps:
+#                    for ins in config.data[t][c]['instrument']:
+#                        # XXX: REMOVE side-effect of active missing, think about moving to config data if used
+#                        #fi_targets = ['fi']
+#                        #if t == 'safire' and w == 'passive' and ins == 'omplib':
+#                        #    fi_targets += ['fi-0' ,'fi-1-15' ]
+#                        for i in config.data[t][c]['inputs']:
+#                            for n in config.data[t][c][i]['nthreads']:
+#                                #print('\r', '<%8s> Processing %8s %8s %8s %8s %5s %3s %6s %6s' % ('FI', t, a, c, w, i, n, ins, 'fi'), end='')
+#                                print('<%8s> Processing %8s %8s %8s %8s %5s %3s %6s %6s' % ('FI', t, a, c, w, i, n, ins, 'fi'), end='')
+#                                #def parse_fi(resdir, tool, config, app, action, instrument, nthreads, inputsize, start, end, verbose):
+#                                missing, timeout, crash, soc, benign, m_time, s_time, e_time = ( 
+#                                        parse_fi(resdir, t, c, w, a, 'fi', ins, n, i, start, end, False) )
+#
+#                                results['fi'][t][w][a][c][i][n][ins]['outcomes']['missing'] = missing
+#                                results['fi'][t][w][a][c][i][n][ins]['outcomes']['timeout'] = timeout
+#                                results['fi'][t][w][a][c][i][n][ins]['outcomes']['crash'] = crash
+#                                results['fi'][t][w][a][c][i][n][ins]['outcomes']['soc'] = soc
+#                                results['fi'][t][w][a][c][i][n][ins]['outcomes']['benign'] = benign
+#
+#                                results['fi'][t][w][a][c][i][n][ins]['time']['mean'] = m_time
+#                                results['fi'][t][w][a][c][i][n][ins]['time']['std'] = s_time
+#                                results['fi'][t][w][a][c][i][n][ins]['time']['sem'] = e_time
+#
+def analyze(results, resdir, tools, apps, pstart, pend, start, end):
     for t in tools:
-        # XXX: skip fi analysis for golden, TODO: move that to config file
-        if t == 'golden':
-            continue
         for c in config.data[t]['exec']:
             for w in config.data[t][c]['wait']:
                 for a in apps:
@@ -238,7 +273,30 @@ def analyze_fi(results, resdir, tools, apps, start, end):
                         #if t == 'safire' and w == 'passive' and ins == 'omplib':
                         #    fi_targets += ['fi-0' ,'fi-1-15' ]
                         for i in config.data[t][c]['inputs']:
-                            for n in config.data[t][c][i]['nthreads']:
+                            for n in config.data[t][c][i][ins]['nthreads']:
+                                #print('\r', '<%8s> Processing %8s %10s %8s %8s %5s %3s %6s %6s' % ('Profile', t, a, c, w, i, n, ins, 'profile'), end='')
+                                print('<%8s> Processing %8s %10s %8s %8s %5s %3s %6s %6s' % ('Profile', t, a, c, w, i, n, ins, 'profile') )
+                                #profiledir = '%s/%s/%s/%s/%s/%s/%s/%s/%s'%(resdir, t, w, c, a, 'profile', ins, n, i)
+                                m_time, s_time, e_time, m_inscount, s_inscount, e_inscount, stats_thread_inscount = (
+                                        parse_profiles(resdir, t, c, w, a, ins, n, i, pstart, pend) )
+
+                                results['profile'][t][w][a][c][i][n][ins]['time']['mean'] = m_time
+                                results['profile'][t][w][a][c][i][n][ins]['time']['std'] = s_time
+                                results['profile'][t][w][a][c][i][n][ins]['time']['sem'] = e_time
+
+                                results['profile'][t][w][a][c][i][n][ins]['inscount']['mean'] = m_inscount
+                                results['profile'][t][w][a][c][i][n][ins]['inscount']['std'] = s_inscount
+                                results['profile'][t][w][a][c][i][n][ins]['inscount']['sem'] = e_inscount
+                                if c == 'omp':
+                                    for j, [m, s, e] in enumerate( stats_thread_inscount ):
+                                       results['profile'][t][w][a][c][i][n][ins]['thread_inscount'][j]['mean'] = m
+                                       results['profile'][t][w][a][c][i][n][ins]['thread_inscount'][j]['std'] = s
+                                       results['profile'][t][w][a][c][i][n][ins]['thread_inscount'][j]['sem'] = e
+
+                                # XXX: skip fi analysis for golden, TODO: move that to config file
+                                if t == 'golden':
+                                    continue
+
                                 print('\r', '<%8s> Processing %8s %8s %8s %8s %5s %3s %6s %6s' % ('FI', t, a, c, w, i, n, ins, 'fi'), end='')
                                 #def parse_fi(resdir, tool, config, app, action, instrument, nthreads, inputsize, start, end, verbose):
                                 missing, timeout, crash, soc, benign, m_time, s_time, e_time = ( 
@@ -254,10 +312,10 @@ def analyze_fi(results, resdir, tools, apps, start, end):
                                 results['fi'][t][w][a][c][i][n][ins]['time']['std'] = s_time
                                 results['fi'][t][w][a][c][i][n][ins]['time']['sem'] = e_time
 
-                
 def main():
     parser = argparse.ArgumentParser('Create json file of results')
     parser.add_argument('-r', '--resdir', help='results directory', required=True)
+    parser.add_argument('-o', '--output', help='output file', required=True)
     parser.add_argument('-t', '--tools', help='tool to run', choices=['golden', 'safire', 'refine', 'pinfi', 'pinfi-detach' ], nargs='+', required=True)
     parser.add_argument('-ps', '--pstart', help='start trial', type=int, required=True)
     parser.add_argument('-pe', '--pend', help='end trial', type=int, required=True)
@@ -271,11 +329,12 @@ def main():
     results = nested_dict()
 
     #def analyze_profiles(resdir, tools, apps, config, espace):
-    analyze_profiles(results, args.resdir, args.tools, apps, args.pstart, args.pend)
+    #analyze_profiles(results, args.resdir, args.tools, apps, args.pstart, args.pend)
     #def analyze_fi(resdir, tools, apps, config, espace):
-    analyze_fi(results, args.resdir, args.tools, apps, args.start, args.end)
+    #analyze_fi(results, args.resdir, args.tools, apps, args.start, args.end)
+    analyze(results, args.resdir, args.tools, apps, args.pstart, args.pend, args.start, args.end)
 
-    json.dump(results, open('results.json', 'w'), sort_keys=True, indent=4 )
+    json.dump(results, open(args.output, 'w'), sort_keys=True, indent=4 )
 
 if __name__ == "__main__":
     main()
