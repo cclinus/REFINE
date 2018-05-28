@@ -100,13 +100,17 @@ programs = {
         'miniFE' : {
             'builddir':'miniFE/ref/src/', 'buildargs': { 'test':[], 'small':[], 'large':[] },
             'exec' : {
-                'test'  : ['/miniFE/ref/src/miniFE.x','-nx','16','-ny','16','-nz','16','-verify_solution','1'],
-                'small' : ['/miniFE/ref/src/miniFE.x','-nx','64','-ny','64','-nz','64','-verify_solution','1'],
-                'large' : ['/miniFE/ref/src/miniFE.x','-nx','256','-ny','256','-nz','256','-verify_solution','1'],
+                #'test'  : ['/miniFE/ref/src/miniFE.x','-nx','16','-ny','16','-nz','16','-verify_solution','1'],
+                #'small' : ['/miniFE/ref/src/miniFE.x','-nx','64','-ny','64','-nz','64','-verify_solution','1'],
+                #'large' : ['/miniFE/ref/src/miniFE.x','-nx','256','-ny','256','-nz','256','-verify_solution','1'],
+                'test'  : ['/miniFE/ref/src/miniFE.x','-nx','16','-ny','16','-nz','16'],
+                'small' : ['/miniFE/ref/src/miniFE.x','-nx','64','-ny','64','-nz','64'],
+                'large' : ['/miniFE/ref/src/miniFE.x','-nx','256','-ny','256','-nz','256'],
             },
             'clean' : '/bin/rm -rf miniFE*yaml',
             'verify' : {
                 'test'  : ['Final Resid Norm: ' + FLOAT],
+                #'small'  : [ 'solution matches' ],
                 'small' : ['Final Resid Norm: ' + FLOAT],
                 'large' : ['Final Resid Norm: ' + FLOAT],
             }
@@ -338,9 +342,11 @@ programs = {
             },
             'clean' : '/bin/rm -rf miniFE*yaml',
             'verify' : {
-                'test'  : ['Final Resid Norm: ' + FLOAT],
-                'small' : ['Final Resid Norm: ' + FLOAT],
-                'large' : ['Final Resid Norm: ' + FLOAT],
+                'test' : ['Final Resid Norm: ' + FLOAT],
+                'small'  : [ 'solution matches' ],
+                #'small' : ['Final Resid Norm: ' + FLOAT],
+                'large'  : [ 'solution matches' ],
+                #'large' : ['Final Resid Norm: ' + FLOAT],
             }
         },
 
